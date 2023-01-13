@@ -54,9 +54,8 @@ using namespace xilinx::air;
 
 static uint64_t DmaMemcpyOpID;
 
-static
-FailureOr<air::DmaMemcpyNdOp> matchAndRewriteCopyOp(memref::CopyOp op,
-                                                    PatternRewriter &rewriter) {
+static FailureOr<air::DmaMemcpyNdOp>
+matchAndRewriteCopyOp(memref::CopyOp op, PatternRewriter &rewriter) {
   auto loc = op.getLoc();
   auto src = op.getSource();
   auto dst = op.getTarget();
@@ -143,9 +142,9 @@ FailureOr<air::DmaMemcpyNdOp> matchAndRewriteCopyOp(memref::CopyOp op,
   auto dma = rewriter.create<air::DmaMemcpyNdOp>(
       loc, tys, deps, dst, dst_offsets, dst_sizes, dst_strides, src,
       src_offsets, src_sizes, src_strides);
-  dma->setAttr("id", mlir::IntegerAttr::get(
-                          mlir::IntegerType::get(op->getContext(), 32),
-                          ++DmaMemcpyOpID));
+  dma->setAttr(
+      "id", mlir::IntegerAttr::get(mlir::IntegerType::get(op->getContext(), 32),
+                                   ++DmaMemcpyOpID));
 
   rewriter.eraseOp(op);
   return dma;
@@ -446,7 +445,7 @@ class MemrefCopyToAIRDmaConversion : public OpRewritePattern<memref::CopyOp> {
   using OpRewritePattern<memref::CopyOp>::OpRewritePattern;
   LogicalResult matchAndRewrite(memref::CopyOp op,
                                 PatternRewriter &rewriter) const override {
-    if(failed(matchAndRewriteCopyOp(op, rewriter)))
+    if (failed(matchAndRewriteCopyOp(op, rewriter)))
       return failure();
     return success();
   }
@@ -1259,7 +1258,8 @@ public:
   ScfParToHerdConversion(MLIRContext *ctx,
                          llvm::SmallSet<scf::ParallelOp, 2> &filteredOps,
                          llvm::SmallSet<air::HerdOp, 2> &replacementOps)
-      : OpRewritePattern(ctx), filteredOps(filteredOps), replacementOps(replacementOps) {};
+      : OpRewritePattern(ctx), filteredOps(filteredOps),
+        replacementOps(replacementOps){};
 
   LogicalResult matchAndRewrite(scf::ParallelOp parOp,
                                 PatternRewriter &rewriter) const override {
@@ -1394,7 +1394,8 @@ public:
   ScfParToLaunchConversion(MLIRContext *ctx,
                            llvm::SmallSet<scf::ParallelOp, 2> &filteredOps,
                            llvm::SmallSet<air::LaunchOp, 2> &replacementOps)
-      : OpRewritePattern(ctx), filteredOps(filteredOps), replacementOps(replacementOps) {};
+      : OpRewritePattern(ctx), filteredOps(filteredOps),
+        replacementOps(replacementOps){};
 
   LogicalResult matchAndRewrite(scf::ParallelOp parOp,
                                 PatternRewriter &rewriter) const override {
@@ -1974,7 +1975,8 @@ struct ParallelToLaunchPass
     if (clHasPartition) {
       patterns.add<ScfParToLaunchAndPartitionConversion>(context, filteredOps);
     } else {
-      patterns.add<ScfParToLaunchConversion>(context, filteredOps, replacementOps);
+      patterns.add<ScfParToLaunchConversion>(context, filteredOps,
+                                             replacementOps);
     }
 
     ConversionTarget target(*context);
@@ -2007,15 +2009,17 @@ struct ParallelToLaunchPass
 
 DiagnosedSilenceableFailure
 transform::ParToHerdOp::applyToOne(scf::ParallelOp target,
-                                 SmallVectorImpl<Operation *> &results,
-                                 transform::TransformState &state) {
+                                   SmallVectorImpl<Operation *> &results,
+                                   transform::TransformState &state) {
   auto ctx = target->getContext();
   RewritePatternSet patterns(ctx);
   llvm::SmallSet<air::HerdOp, 2> herdOps;
   llvm::SmallSet<scf::ParallelOp, 2> filteredOps;
   filteredOps.insert(target);
   patterns.add<ScfParToHerdConversion>(ctx, filteredOps, herdOps);
-  (void)applyPatternsAndFoldGreedily(target->getParentWithTrait<OpTrait::IsIsolatedFromAbove>(), std::move(patterns));
+  (void)applyPatternsAndFoldGreedily(
+      target->getParentWithTrait<OpTrait::IsIsolatedFromAbove>(),
+      std::move(patterns));
   for (auto h : herdOps)
     results.push_back(h);
   return DiagnosedSilenceableFailure::success();
@@ -2023,15 +2027,17 @@ transform::ParToHerdOp::applyToOne(scf::ParallelOp target,
 
 DiagnosedSilenceableFailure
 transform::ParToLaunchOp::applyToOne(scf::ParallelOp target,
-                                 SmallVectorImpl<Operation *> &results,
-                                 transform::TransformState &state) {
+                                     SmallVectorImpl<Operation *> &results,
+                                     transform::TransformState &state) {
   auto ctx = target->getContext();
   RewritePatternSet patterns(ctx);
   llvm::SmallSet<air::LaunchOp, 2> launchOps;
   llvm::SmallSet<scf::ParallelOp, 2> filteredOps;
   filteredOps.insert(target);
   patterns.add<ScfParToLaunchConversion>(ctx, filteredOps, launchOps);
-  (void)applyPatternsAndFoldGreedily(target->getParentWithTrait<OpTrait::IsIsolatedFromAbove>(), std::move(patterns));
+  (void)applyPatternsAndFoldGreedily(
+      target->getParentWithTrait<OpTrait::IsIsolatedFromAbove>(),
+      std::move(patterns));
   for (auto l : launchOps)
     results.push_back(l);
   return DiagnosedSilenceableFailure::success();
@@ -2044,8 +2050,8 @@ public:
 
 DiagnosedSilenceableFailure
 transform::CopyToDmaOp::applyToOne(memref::CopyOp op,
-                                 SmallVectorImpl<Operation *> &results,
-                                 transform::TransformState &state) {
+                                   SmallVectorImpl<Operation *> &results,
+                                   transform::TransformState &state) {
   auto ctx = op->getContext();
   // RewritePatternSet stage1Patterns =
   //   linalg::getLinalgTilingCanonicalizationPatterns(ctx);

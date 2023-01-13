@@ -1486,8 +1486,9 @@ public:
 //===----------------------------------------------------------------------===//
 
 void transform::LinalgTileOp::build(OpBuilder &builder, OperationState &result,
-                              Value target, ArrayRef<int64_t> staticTileSizes,
-                              ArrayRef<int64_t> interchange) {
+                                    Value target,
+                                    ArrayRef<int64_t> staticTileSizes,
+                                    ArrayRef<int64_t> interchange) {
   return build(builder, result,
                /*target=*/target,
                /*mixedTileSizes=*/
@@ -1496,9 +1497,9 @@ void transform::LinalgTileOp::build(OpBuilder &builder, OperationState &result,
 }
 
 void transform::LinalgTileOp::build(OpBuilder &builder, OperationState &result,
-                              Value target,
-                              ArrayRef<OpFoldResult> mixedTileSizes,
-                              ArrayRef<int64_t> interchange) {
+                                    Value target,
+                                    ArrayRef<OpFoldResult> mixedTileSizes,
+                                    ArrayRef<int64_t> interchange) {
   SmallVector<int64_t> staticTileSizes;
   SmallVector<Value> dynamicTileSizes;
   dispatchIndexOpFoldResults(mixedTileSizes, dynamicTileSizes, staticTileSizes);
@@ -1518,7 +1519,7 @@ void transform::LinalgTileOp::build(OpBuilder &builder, OperationState &result,
 
 DiagnosedSilenceableFailure
 transform::LinalgTileOp::apply(TransformResults &transformResults,
-                         TransformState &state) {
+                               TransformState &state) {
   ArrayRef<int64_t> tileSizes = getStaticSizes();
 
   ArrayRef<Operation *> targets = state.getPayloadOps(getTarget());
@@ -1588,9 +1589,8 @@ transform::LinalgTileOp::apply(TransformResults &transformResults,
     SmallVector<unsigned int> inter(getInterchange());
     tilingOptions.setInterchange(inter);
     SimpleRewriter rewriter(linalgOp.getContext());
-    FailureOr<linalg::TiledLinalgOp> maybeTilingResult = linalg::tileLinalgOp(
-        rewriter, linalgOp,
-        tilingOptions);
+    FailureOr<linalg::TiledLinalgOp> maybeTilingResult =
+        linalg::tileLinalgOp(rewriter, linalgOp, tilingOptions);
     if (failed(maybeTilingResult))
       return DiagnosedSilenceableFailure::definiteFailure();
 
@@ -1632,7 +1632,7 @@ SmallVector<OpFoldResult> transform::LinalgTileOp::getMixedSizes() {
 // We want to parse `DenseI64ArrayAttr` using the short form without the
 // `array` prefix to be consistent in the IR with `parseDynamicIndexList`.
 static ParseResult parseInterchange(OpAsmParser &parser,
-                                     OperationState &result) {
+                                    OperationState &result) {
   if (succeeded(parser.parseOptionalLBrace())) {
     if (failed(parser.parseKeyword("interchange")))
       return parser.emitError(parser.getNameLoc()) << "expect `interchange`";
@@ -1647,7 +1647,7 @@ static ParseResult parseInterchange(OpAsmParser &parser,
 }
 
 static void printInterchange(OpAsmPrinter &p,
-                              ArrayRef<int64_t> interchangeVals) {
+                             ArrayRef<int64_t> interchangeVals) {
   if (!interchangeVals.empty()) {
     p << " {interchange = [";
     llvm::interleaveComma(interchangeVals, p,
@@ -1657,7 +1657,7 @@ static void printInterchange(OpAsmPrinter &p,
 }
 
 ParseResult transform::LinalgTileOp::parse(OpAsmParser &parser,
-                                     OperationState &result) {
+                                           OperationState &result) {
   OpAsmParser::UnresolvedOperand target;
   SmallVector<OpAsmParser::UnresolvedOperand> dynamicSizes;
   DenseI64ArrayAttr staticSizes;
@@ -1700,8 +1700,8 @@ void transform::LinalgTileOp::getEffects(
 
 DiagnosedSilenceableFailure
 transform::LinalgPromoteOp::applyToOne(linalg::LinalgOp target,
-                                 SmallVectorImpl<Operation *> &results,
-                                 transform::TransformState &state) {
+                                       SmallVectorImpl<Operation *> &results,
+                                       transform::TransformState &state) {
   linalg::LinalgPromotionOptions promotionOptions;
   if (!getOperandsToPromote().empty())
     promotionOptions = promotionOptions.setOperandsToPromote(
@@ -1723,7 +1723,8 @@ transform::LinalgPromoteOp::applyToOne(linalg::LinalgOp target,
   auto ctx = target->getContext();
   SimpleRewriter rewriter(ctx);
   rewriter.setInsertionPoint(target);
-  FailureOr<linalg::LinalgOp> res = promoteSubViews(rewriter, target, promotionOptions);
+  FailureOr<linalg::LinalgOp> res =
+      promoteSubViews(rewriter, target, promotionOptions);
   if (failed(res))
     return emitDefaultDefiniteFailure(target);
   results.push_back(target);
@@ -1733,7 +1734,8 @@ transform::LinalgPromoteOp::applyToOne(linalg::LinalgOp target,
   patterns.insert<FoldSubViewOpsPattern>(ctx);
   patterns.insert<MemrefsPattern>(ctx);
   scf::populateSCFForLoopCanonicalizationPatterns(patterns);
-  (void)applyPatternsAndFoldGreedily(target->getParentOfType<func::FuncOp>(), std::move(patterns));
+  (void)applyPatternsAndFoldGreedily(target->getParentOfType<func::FuncOp>(),
+                                     std::move(patterns));
   return DiagnosedSilenceableFailure::success();
 }
 

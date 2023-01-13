@@ -9,8 +9,8 @@
 #ifndef MLIR_AIR_TRANSFORM_OPS_H
 #define MLIR_AIR_TRANSFORM_OPS_H
 
-#include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/Linalg/IR/Linalg.h"
+#include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/PDL/IR/PDLTypes.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/Transform/IR/TransformInterfaces.h"
