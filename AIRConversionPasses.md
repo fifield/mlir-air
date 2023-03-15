@@ -3,20 +3,31 @@
 Convert memcpy to air.dma_memcpy_nd
 ### `-air-dma-to-channel`: Convert air.dma_memcpy_nd to air.channel
 Convert air.dma_memcpy_nd to air.channel
-### `-air-par-to-herd`: Lower scf.parallel to air.launch_herd
-Lower scf.parallel to air.launch_herd
+### `-air-par-to-herd`: Convert parallel loops to air.herd
+This pass converts parallel loop operations to air `herd` operations. The
+parallel loops can be `scf.parallel` or `affine.parallel` operations with 1
+or 2 dimensional iteration spaces. The iteration space of the parallel loop
+will be normalized and will become the spacial iteration space of the new
+`herd`. If nested parallel loops are present then the `depth` option can
+to used to specify which loop depth to convert.
 
 #### Options
 ```
 -depth : Given a nest of parallel for loops, which depth to map to air.herd
 ```
-### `-air-par-to-launch`: Lower scf.parallel to air.launch
-Lower scf.parallel to air.launch
+### `-air-par-to-launch`: Convert parallel loops to air.launch
+This pass converts parallel loop operations to air `launch` operations. The
+parallel loops can be `scf.parallel` or `affine.parallel` operations. The
+iteration space of the parallel loops will be normalized and will become the
+iteration space of the new `launch`. If nested parallel loops are present
+then the `depth` option can to used to specify which loop depth to convert.
+An air `partition` operation can optionally be inserted at the top level of
+the generated `launch` operations with the `has-air-partition` option.
 
 #### Options
 ```
 -depth             : Given a nest of parallel for loops, which depth to map to air.launch
--has-air-partition : Whether to create an air.partition op in air.launch's region
+-has-air-partition : Whether to create an air.partition op in generated air.launch regions
 ```
 ### `-air-pipeline-to-affine`: Lower air.pipeline stages to affine.if
 Lower air.pipeline stages to affine.if
@@ -135,7 +146,7 @@ airrt.module_metadata{
 -emit-herd-lock  : Acquire and release a lock at the start and end of herd execution. The default is to acquire lock 0 with value zero and release it with value 0. There is currently no way to override the default behavior.
 -test-patterns   : Test the given patterns.
 ```
-### `-air-to-cpu`: AIR dialect lowering
+### `-air-to-async`: AIR dialect lowering
 ### `-air-to-std`: AIR dialect lowering
 This pass converts AIR dialect herd launch operations into loop nests
 representing the host-side control program for the herd. It also converts

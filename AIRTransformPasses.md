@@ -374,6 +374,7 @@ dot files for graph visualization.
 #### Options
 ```
 -output-dir : Target directory to dump dot graphs.
+-show-cores : Show the graph of each AIE core.
 ```
 ### `-air-dependency-schedule-opt`: Optimize scheduling based on air async dependency
 This pass contains multiple passes which optimize the schedule based on the
@@ -571,7 +572,7 @@ to be run after the air-to-aie pass.
 
 #### Options
 ```
--tile-size          : Tile size to use for reduction dimension
+-tile-size          : Tile factors to pass to L1 tiling
 -pipeline-depth     : Pipeline depth to generate
 -pipeline-direction : Pipeline direction attribute to use. Can be 'vert' or 'horiz'
 -promote            : Promote subviews to memory buffers and insert copies.
@@ -759,3 +760,9 @@ module  {
 ### `-air-rm-linalg-name`: Remove LinalgTransformMarker string attributes from linalg ops
 ### `-air-specialize-dma`: Specialize dma operations
 ### `-air-specialize-dma-broadcast`: Specialize dma operations for broadcast pattern
+### `-air-transform`: Transform IR with transform dialect
+
+#### Options
+```
+-filename : Transform Dialect filename
+```

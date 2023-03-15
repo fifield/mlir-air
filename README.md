@@ -36,11 +36,16 @@ air
 - [AIRRt Dialect](AIRRtDialect.html)
 - [AIR Transform Passes](AIRTransformPasses.html)
 - [AIR Conversion Passes](AIRConversionPasses.html)
+- [Transform Dialect Extensions](AIRTransformOps.html)
 
 ### AIR Platform Documentation
 #### [VCK190 platform](platforms/xilinx_vck190_air)
 #### [VCK5000 platform](platforms/xilinx_vck5000_air)
 #### [Building MicroBlaze firmware](vck190_microblaze_firmware.html)
+
+### Tutorials
+- [AIR Asynchronous Concurrency](AIRAsyncConcurrency.html)
+- [AIR Runner](AIRRunner.html)
 
 -----
 
