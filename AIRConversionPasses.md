@@ -3,6 +3,9 @@
 Convert memcpy to air.dma_memcpy_nd
 ### `-air-dma-to-channel`: Convert air.dma_memcpy_nd to air.channel
 Convert air.dma_memcpy_nd to air.channel
+### `-air-insert-launch-and-segment-around-herd`: Insert segment and launch ops around herd op
+This pass inserts launch and segment operations around herd op, if a herd op 
+does not have a parent launch or segment operation.
 ### `-air-par-to-herd`: Convert parallel loops to air.herd
 This pass converts parallel loop operations to air `herd` operations. The
 parallel loops can be `scf.parallel` or `affine.parallel` operations with 1
@@ -13,7 +16,8 @@ to used to specify which loop depth to convert.
 
 #### Options
 ```
--depth : Given a nest of parallel for loops, which depth to map to air.herd
+-depth     : Given a nest of parallel for loops, which depth to map to air.herd
+-first-dim : Which herd dimension to map to first. Can be zero or one. If set to zero, the 0th dimension of the scf.parallel will be mapped to the x dimension of the herd. If set to one, the 0th dimension of the scf.parallel will be mapped to the y dimension of the herd.
 ```
 ### `-air-par-to-launch`: Convert parallel loops to air.launch
 This pass converts parallel loop operations to air `launch` operations. The
@@ -35,6 +39,12 @@ Lower air.pipeline stages to affine.if
 #### Options
 ```
 -lowering-type : Type of lowering to use for core-to-core communication. Can be 'buffer' or 'getput'
+```
+### `-air-split-devices`: Split the input into one output per AIE.device op
+
+#### Options
+```
+-output-prefix : File name prefix for split AIE modules. Set to '-' for stdout (default).
 ```
 ### `-air-to-aie`: Lower air.launch_herd to AIE dialect
 This pass converts AIR dialect `herd` and `segment` operations into AIE
@@ -139,13 +149,14 @@ airrt.module_metadata{
 
 #### Options
 ```
--output-prefix   : File name prefix for generated AIE modules. Set to /dev/null for no output. Set to '-' for stdout (default).
--row-offset      : The default start row for any herds without 'y_loc' attribute.
--col-offset      : The default start column for any herds without 'x_loc' attribute.
--emit-while-loop : Emit a while(1) around the herd code in generated AIR.core ops.
--emit-herd-lock  : Acquire and release a lock at the start and end of herd execution. The default is to acquire lock 0 with value zero and release it with value 0. There is currently no way to override the default behavior.
--test-patterns   : Test the given patterns.
--device          : AIE device to target.
+-row-offset        : The default start row for any herds without 'y_loc' attribute.
+-col-offset        : The default start column for any herds without 'x_loc' attribute.
+-emit-while-loop   : Emit a while(1) around the herd code in generated AIR.core ops.
+-emit-herd-lock    : Acquire and release a lock at the start and end of herd execution. The default is to acquire lock 0 with value zero and release it with value 0. There is currently no way to override the default behavior.
+-test-patterns     : Test the given patterns.
+-device            : AIE device to target.
+-use-objectfifo    : Choose whether to lower data movement ops to aie.objectFifo, or directly to aie.locks.
+-generate-shim-dma : Choose whether to schedule shim data movement via generating AIE  shim DMA program, or AIR runtime.
 ```
 ### `-air-to-async`: AIR dialect lowering
 ### `-air-to-std`: AIR dialect lowering

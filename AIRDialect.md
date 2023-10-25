@@ -100,7 +100,7 @@ Experimental operation to represent copying from a channel to a memref.
 
 Traits: AttrSizedOperandSegments
 
-Interfaces: air_AsyncOpInterface, air_ChannelInterface
+Interfaces: air_AsyncOpInterface, air_ChannelInterface, air_MemcpyInterface
 
 #### Attributes:
 
@@ -174,7 +174,7 @@ Experimental operation to represent copying data from a memref to a channel.
 
 Traits: AttrSizedOperandSegments
 
-Interfaces: air_AsyncOpInterface, air_ChannelInterface
+Interfaces: air_AsyncOpInterface, air_ChannelInterface, air_MemcpyInterface
 
 #### Attributes:
 
@@ -192,6 +192,37 @@ Interfaces: air_AsyncOpInterface, air_ChannelInterface
 | `src_offsets` | index
 | `src_sizes` | index
 | `src_strides` | index
+
+#### Results:
+
+| Result | Description |
+| :----: | ----------- |
+| `async_token` | async token type
+
+### `air.custom` (xilinx::air::CustomOp)
+
+A handle to a user-customized op
+
+A placeholder operation for a user-customized op. With user-specified 
+latency value, AIR Runner is able to simulate the system-level
+performance with this op in place.
+
+Traits: AttrSizedOperandSegments
+
+Interfaces: air_AsyncOpInterface
+
+#### Attributes:
+
+| Attribute | MLIR Type | Description |
+| :-------: | :-------: | ----------- |
+| `symbol` | ::mlir::SymbolRefAttr | symbol reference attribute
+
+#### Operands:
+
+| Operand | Description |
+| :-----: | ----------- |
+| `async_dependencies` | async token type
+| `custom_operands` | any type
 
 #### Results:
 
@@ -245,7 +276,7 @@ dma operator
 
 Traits: AttrSizedOperandSegments
 
-Interfaces: air_AsyncOpInterface, air_DmaMemcpyInterface
+Interfaces: air_AsyncOpInterface, air_MemcpyInterface
 
 #### Operands:
 
