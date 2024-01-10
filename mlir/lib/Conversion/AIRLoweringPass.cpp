@@ -1042,10 +1042,11 @@ public:
     });
 
     target.addDynamicallyLegalOp<scf::ReduceOp>([&](scf::ReduceOp op) {
-      if (op.getOperands()[0].getType().isa<air::AsyncTokenType>())
-        return false;
-      else
-        return true;
+      for (auto oper : op.getOperands()) {
+        if (oper.getType().isa<air::AsyncTokenType>())
+          return false;
+      }
+      return true;
     });
 
     target.addDynamicallyLegalOp<scf::ReduceReturnOp>(
