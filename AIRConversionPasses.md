@@ -5,85 +5,6 @@ _Convert memcpy to air.dma_memcpy_nd_
 
 Converts memory operations to optimize data transfer through Direct Memory 
 Access (DMA) operations.
-### `-air-dma-to-channel`
-
-_Convert air.dma_memcpy_nd to air.channel_
-
-Transforms direct memory access (DMA) operations into channel-based 
-communications, consisting of a series of channel put and get operations 
-via shared channel constructs.
-
-Example:
-
-Input:
-```mlir
-%0 = air.launch async [%async_token_0, %async_token_3, %async_token_6] (%arg0, %arg1) in (%arg2=%c4, %arg3=%c4) args(%arg4=%results_5, %arg5=%results, %arg6=%results_2) : memref<512x512xi32>, memref<512x1024xi32>, memref<1024x512xi32> attributes {id = 3 : i32} {
-  %1 = air.segment @segment_0 async  args(%arg7=%arg0, %arg8=%arg1, %arg9=%arg4, %arg10=%arg5, %arg11=%arg6) : index, index, memref<512x512xi32>, memref<512x1024xi32>, memref<1024x512xi32> attributes {id = 2 : i32} {
-    ...
-    %3 = scf.for %arg12 = %c0_8 to %c1024 step %c256 iter_args(%arg13 = %2) -> (!air.async.token) {
-      %8 = air.dma_memcpy_nd async [%arg13, %arg13] (%results_14[%c0_8, %arg12] [%c128, %c256] [%c1024, %c1], %arg10[%results_10, %arg12] [%c128, %c256] [%c1024, %c1]) {id = 1 : i32} : (memref<128x1024xi32, 1 : i32>, memref<512x1024xi32>)
-      ...
-    }
-    %6 = air.herd @herd_0 async [%async_token_13, %async_token_15, %async_token_17]  tile (%arg12, %arg13) in (%arg14=%c4_7, %arg15=%c4_7) args(%arg16=%results_14, %arg17=%results_16, %arg18=%results_18) : memref<128x1024xi32, 1 : i32>, memref<1024x128xi32, 1 : i32>, memref<128x128xi32, 1 : i32> attributes {id = 1 : i32} {
-      ...
-      %9 = scf.for %arg19 = %c0_23 to %c128_26 step %c4_24 iter_args(%arg20 = %8) -> (!air.async.token) {
-        ...
-        %16 = air.dma_memcpy_nd async [%async_token_37, %async_token_35, %arg20] (%results_38[%c0_23] [%c1024_22] [%c1_25], %arg16[%c0_44, %c0_43, %results_36] [%c4_24, %c32, %c8] [%c8, %c1024_22, %c1_25]) {broadcast_set = affine_set<()[s0, s1] : (s0 == 0, s1 >= 0, -s1 + 3 >= 0)>, id = 3 : i32} : (memref<4x8x4x8xi32, 2 : i32>, memref<128x1024xi32, 1 : i32>)
-        ...
-      }
-      ...
-      air.herd_terminator
-    }
-    ...
-    air.segment_terminator
-  }
-  air.launch_terminator
-}
-```
-
-Output:
-```mlir
-...
-air.channel @channel_8 [1, 1]
-...
-air.channel @channel_0 [1, 1] {broadcast_shape = [1, 4]}
-...
-%0 = air.launch async [%async_token_0, %async_token_3, %async_token_6] (%arg0, %arg1) in (%arg2=%c4, %arg3=%c4) args(%arg4=%results_5, %arg5=%results, %arg6=%results_2) : memref<512x512xi32>, memref<512x1024xi32>, memref<1024x512xi32> attributes {id = 3 : i32} {
-  ...
-  %2 = scf.for %arg7 = %c0_7 to %c1024 step %c256 iter_args(%arg8 = %1) -> (!air.async.token) {
-    ...
-    %17 = air.channel.put async [%async_token_8, %arg8]  @channel_8[] (%arg5[%results_9, %arg7] [%c128, %c256] [%c1024, %c1]) : (memref<512x1024xi32>)
-    ...
-  }
-  ...
-  %16 = air.segment @segment_0 async  args(%arg7=%arg0, %arg8=%arg1, %arg9=%arg4, %arg10=%arg5, %arg11=%arg6) : index, index, memref<512x512xi32>, memref<512x1024xi32>, memref<1024x512xi32> attributes {id = 2 : i32} {
-    ...
-    %18 = scf.for %arg12 = %c0_32 to %c1024_33 step %c256_34 iter_args(%arg13 = %17) -> (!air.async.token) {
-      %49 = air.channel.get async [%arg13, %arg13]  @channel_8[] (%results_40[%c0_32, %arg12] [%c128_30, %c256_34] [%c1024_33, %c1_29]) : (memref<128x1024xi32, 1 : i32>)
-      ...
-    }
-    ...
-    %23 = scf.for %arg12 = %c0_47 to %c128_50 step %c4_48 iter_args(%arg13 = %22) -> (!air.async.token) {
-      ...
-      %49 = air.channel.put async [%async_token_160, %async_token_39, %arg13]  @channel_0[] (%results_40[%c0_163, %c0_162, %results_161] [%c4_48, %c32, %c8] [%c8, %c1024_46, %c1_49]) : (memref<128x1024xi32, 1 : i32>)
-      ...
-    }
-    ...
-    %47 = air.herd @herd_0 async [%async_token_39, %async_token_41, %async_token_43]  tile (%arg12, %arg13) in (%arg14=%c4_31, %arg15=%c4_31) args(%arg16=%results_40, %arg17=%results_42, %arg18=%results_44) : memref<128x1024xi32, 1 : i32>, memref<1024x128xi32, 1 : i32>, memref<128x128xi32, 1 : i32> attributes {id = 1 : i32} {
-      ...
-      %50 = scf.for %arg19 = %c0_155 to %c128_159 step %c4_156 iter_args(%arg20 = %49) -> (!air.async.token) {
-        ...
-        %57 = air.channel.get async [%async_token_170, %async_token_168, %arg20]  @channel_0[%arg12, %arg13] (%results_171[%c0_155] [%c1024_154] [%c1_158]) : (memref<4x8x4x8xi32, 2 : i32>)
-        ...
-      }
-      ...
-      air.herd_terminator
-    }
-    air.segment_terminator
-  }
-  air.launch_terminator
-}
-```
 ### `-air-insert-launch-and-segment-around-herd`
 
 _Insert segment and launch ops around herd op_
@@ -131,16 +52,6 @@ the generated `launch` operations with the `has-air-segment` option.
 ```
 -depth           : Given a nest of parallel for loops, which depth to map to air.launch
 -has-air-segment : Whether to create an air.segment op in generated air.launch regions
-```
-### `-air-pipeline-to-affine`
-
-_Lower air.pipeline stages to affine.if_
-
-Lower air.pipeline stages to affine.if
-
-#### Options
-```
--lowering-type : Type of lowering to use for core-to-core communication. Can be 'buffer' or 'getput'
 ```
 ### `-air-split-devices`
 
@@ -257,14 +168,16 @@ airrt.module_metadata{
 
 #### Options
 ```
--row-offset        : The default start row for any herds without 'y_loc' attribute.
--col-offset        : The default start column for any herds without 'x_loc' attribute.
--emit-while-loop   : Emit a while(1) around the herd code in generated AIR.core ops.
--emit-herd-lock    : Acquire and release a lock at the start and end of herd execution. The default is to acquire lock 0 with value zero and release it with value 0. There is currently no way to override the default behavior.
--test-patterns     : Test the given patterns.
--device            : AIE device to target.
--use-objectfifo    : Choose whether to lower data movement ops to aie.objectFifo, or directly to aie.locks.
--generate-shim-dma : Choose whether to schedule shim data movement via generating AIE  shim DMA program, or AIR runtime.
+-row-offset                 : The default start row for any herds without 'y_loc' attribute.
+-col-offset                 : The default start column for any herds without 'x_loc' attribute.
+-emit-while-loop            : Emit a while(1) around the herd code in generated AIR.core ops.
+-emit-herd-lock             : Acquire and release a lock at the start and end of herd execution. The default is to acquire lock 0 with value zero and release it with value 0. There is currently no way to override the default behavior.
+-test-patterns              : Test the given patterns.
+-device                     : AIE device to target.
+-use-objectfifo             : Choose whether to lower data movement ops to aie.objectFifo, or directly to aie.locks.
+-generate-shim-dma          : Choose whether to schedule shim data movement via generating AIE  shim DMA program, or AIR runtime.
+-insert-trace-packet-flow   : Create packet routed traces for cores and memtiles
+-insert-control-packet-flow : Create packet routed control packets from ShimDMAs to reconfigure  AIE tiles
 ```
 ### `-air-to-async`
 
@@ -342,7 +255,7 @@ Example:
 Input:
 ```mlir
 module {
-  aie.device(npu) {
+  aie.device(npu1_1col) {
     ...
     aie.shim_dma_allocation @airMemcpyId78(S2MM, 0, 0)
     memref.global "public" @airMemcpyId78 : memref<32x128xi32, 1>
@@ -376,7 +289,7 @@ module {
 Output:
 ```mlir
 module {
-  aie.device(npu) {
+  aie.device(npu1_1col) {
     ...
     aie.shim_dma_allocation @airMemcpyId78(S2MM, 0, 0)
     memref.global "public" @airMemcpyId78 : memref<32x128xi32, 1>
@@ -407,3 +320,9 @@ module {
 }
 ```
 
+
+#### Options
+```
+-trace-size   : Trace buffer size for cores and memtiles (in bytes)
+-trace-offset : Trace buffer offset appended to ddr_id=2
+```

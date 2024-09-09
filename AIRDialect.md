@@ -328,6 +328,7 @@ Interfaces: `air_AsyncOpInterface`, `air_HierarchyInterface`
 <table>
 <tr><th>Attribute</th><th>MLIR Type</th><th>Description</th></tr>
 <tr><td><code>sym_name</code></td><td>::mlir::StringAttr</td><td>string attribute</td></tr>
+<tr><td><code>link_with</code></td><td>::mlir::StringAttr</td><td>string attribute</td></tr>
 </table>
 
 #### Operands:
@@ -421,150 +422,6 @@ Interfaces: `ConditionallySpeculatable`, `NoMemoryEffect (MemoryEffectOpInterfac
 Effects: `MemoryEffects::Effect{}`
 
 
-### `air.pipeline` (xilinx::air::HerdPipelineOp)
-
-_Define a pipeline_
-
-
-Syntax:
-
-```
-operation ::= `air.pipeline` attr-dict-with-keyword $body
-```
-
-Define a pipeline within an AIR Herd.
-
-Traits: `AffineScope`, `HasParent<HerdOp>`
-
-
-### `air.pipeline.get` (xilinx::air::PipelineGetOp)
-
-_Get for air pipeline stages._
-
-
-Syntax:
-
-```
-operation ::= `air.pipeline.get` $src0 $src1 attr-dict `:` type($src0) `,` type($src1) `->` type($results)
-```
-
-Experimental operation to represent copying data from another tile.
-Currently used internally by air-to-aie pass during pipeline lowering.
-
-#### Operands:
-
-| Operand | Description |
-| :-----: | ----------- |
-| `src0` | any type
-| `src1` | any type
-
-#### Results:
-
-| Result | Description |
-| :----: | ----------- |
-| `results` | variadic of any type
-
-
-### `air.pipeline.put` (xilinx::air::PipelinePutOp)
-
-_Put for air pipeline stages._
-
-
-Syntax:
-
-```
-operation ::= `air.pipeline.put` $dst0 $dst1 (`,` $opers^)? attr-dict `:` type($dst0) `,` type($dst1) (`,` type($opers)^)?
-```
-
-Experimental operation to represent copying data to another tile.
-Currently used internally by air-to-aie pass during pipeline lowering.
-
-#### Operands:
-
-| Operand | Description |
-| :-----: | ----------- |
-| `dst0` | any type
-| `dst1` | any type
-| `opers` | variadic of any type
-
-
-### `air.pipeline.stage` (xilinx::air::PipelineStageOp)
-
-_Pipeline stage_
-
-Pipeline stage.
-
-Traits: `HasParent<HerdPipelineOp>`
-
-#### Operands:
-
-| Operand | Description |
-| :-----: | ----------- |
-| `opers` | variadic of any type
-
-#### Results:
-
-| Result | Description |
-| :----: | ----------- |
-| `results` | variadic of any type
-
-
-### `air.pipeline.terminator` (xilinx::air::PipelineTerminatorOp)
-
-_Terminator for air pipeline regions._
-
-
-Syntax:
-
-```
-operation ::= `air.pipeline.terminator` attr-dict ($opers^ `:` type($opers))?
-```
-
-A terminator operation for regions that appear in the body of
-`air.pipeline` operation.
-
-Traits: `AlwaysSpeculatableImplTrait`, `HasParent<HerdPipelineOp>`, `Terminator`
-
-Interfaces: `ConditionallySpeculatable`, `NoMemoryEffect (MemoryEffectOpInterface)`
-
-Effects: `MemoryEffects::Effect{}`
-
-#### Operands:
-
-| Operand | Description |
-| :-----: | ----------- |
-| `opers` | variadic of any type
-
-
-### `air.pipeline.yield` (xilinx::air::PipelineYieldOp)
-
-_Yield for air pipeline stages._
-
-
-Syntax:
-
-```
-operation ::= `air.pipeline.yield` ($opers^)? attr-dict (`:` type($opers)^)?
-```
-
-A terminator operation for regions that appear in the body of
-`air.pipeline.stage` operation. The operation takes variable number of
-operands and produces no results. The operand number and types must
-match the signature of the `air.pipeline` that contains the operation.
-
-Traits: `AlwaysSpeculatableImplTrait`, `HasParent<PipelineStageOp>`, `ReturnLike`, `Terminator`
-
-Interfaces: `ConditionallySpeculatable`, `NoMemoryEffect (MemoryEffectOpInterface)`, `RegionBranchTerminatorOpInterface`
-
-Effects: `MemoryEffects::Effect{}`
-
-#### Operands:
-
-| Operand | Description |
-| :-----: | ----------- |
-| `opers` | variadic of any type
-
-
 ### `air.segment` (xilinx::air::SegmentOp)
 
 _Segment_
@@ -652,4 +509,18 @@ Interfaces: `air_AsyncOpInterface`
 ### async token type
 
 
+
+## Enums
+
+### MemorySpace
+
+AIR Memory Space IDs
+
+#### Cases:
+
+| Symbol | Value | String |
+| :----: | :---: | ------ |
+| L1 | `2` | L1 |
+| L2 | `1` | L2 |
+| L3 | `0` | L3 |
 
