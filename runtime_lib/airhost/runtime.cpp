@@ -93,18 +93,18 @@ hsa_status_t air::rocm::Runtime::RunKernel(const std::string &pdi_file,
   void *insts_buf = nullptr;
   hsa_status_t status = HSA_STATUS_SUCCESS;
 
-  std::optional<uint32_t> pdi_size =
-      load_pdi_file(global_dev_pool_, pdi_file,  reinterpret_cast<void **>(&pdi_buf));
-  std::optional<uint32_t> insts_size =
-      load_instr_file(global_dev_pool_, insts_file, reinterpret_cast<void **>(&insts_buf));
+  std::optional<uint32_t> pdi_size = load_pdi_file(
+      global_dev_pool_, pdi_file, reinterpret_cast<void **>(&pdi_buf));
+  std::optional<uint32_t> insts_size = load_instr_file(
+      global_dev_pool_, insts_file, reinterpret_cast<void **>(&insts_buf));
 
   if (!pdi_size || !insts_size)
     return HSA_STATUS_ERROR;
 
   std::cout << "loaded pdi file: " << pdi_file << " size: " << pdi_size.value()
             << std::endl;
-  std::cout << "loaded insts file: " << insts_file << " size: "
-            << insts_size.value() << std::endl;
+  std::cout << "loaded insts file: " << insts_file
+            << " size: " << insts_size.value() << std::endl;
 
   hsa_amd_aie_ert_hw_ctx_cu_config_addr_t cu_config{
       .cu_config_addr = reinterpret_cast<uint64_t>(pdi_buf),
@@ -255,8 +255,9 @@ void air::rocm::Runtime::InitMemSegments() {
 }
 
 void air::rocm::Runtime::InitAieQueue(uint32_t size) {
-  hsa_status_t r = hsa_queue_create(aie_agents_.front(), size, HSA_QUEUE_TYPE_SINGLE, nullptr,
-                   nullptr, 0, 0, &aie_queue_);
+  hsa_status_t r =
+      hsa_queue_create(aie_agents_.front(), size, HSA_QUEUE_TYPE_SINGLE,
+                       nullptr, nullptr, 0, 0, &aie_queue_);
   assert(r == HSA_STATUS_SUCCESS);
   assert(aie_queue_);
   assert(aie_queue_->base_address);
