@@ -12,6 +12,9 @@
 #include "runtime.h"
 #include "test_library.h"
 
+#include "hsa/hsa.h"
+#include "hsa/hsa_ext_amd.h"
+
 #include <assert.h>
 #include <dirent.h>
 #include <dlfcn.h>
@@ -92,11 +95,11 @@ hsa_status_t air_init() {
     return hsa_ret;
   }
 
-  if (_air_host_active_libxaie == nullptr)
-    air_init_libxaie();
+  // if (_air_host_active_libxaie == nullptr)
+  //   air_init_libxaie();
 
-  if (_air_host_active_libxaie == nullptr)
-    return HSA_STATUS_ERROR_OUT_OF_RESOURCES;
+  // if (_air_host_active_libxaie == nullptr)
+  //   return HSA_STATUS_ERROR_OUT_OF_RESOURCES;
 
   return HSA_STATUS_SUCCESS;
 }
@@ -118,6 +121,11 @@ hsa_status_t air_shut_down() {
   }
 
   return HSA_STATUS_SUCCESS;
+}
+
+hsa_status_t run_kernel(const std::string &pdi_file, const std::string &insts_file, std::vector<void *> &args)
+{
+  return air::rocm::Runtime::runtime_->RunKernel(pdi_file, insts_file, args);
 }
 
 air_libxaie_ctx_t air_get_libxaie_ctx() {
@@ -416,8 +424,8 @@ uint64_t air_wait_all(std::vector<uint64_t> &signals) {
       } else {
         // Create a dummy signal that will have a handle of 0
         hsa_signal_t dummy_signal;
-        hsa_amd_signal_create_on_agent(
-            0, 0, nullptr, _air_host_active_segment.agent, 0, &dummy_signal);
+        // hsa_amd_signal_create_on_agent(
+        //     0, 0, nullptr, _air_host_active_segment.agent, 0, &dummy_signal);
         dummy_signal.handle =
             0; // The barrier and packet will ignore a signal with handle of 0
         signals_in_pkt.push_back(dummy_signal);
@@ -433,9 +441,9 @@ uint64_t air_wait_all(std::vector<uint64_t> &signals) {
       air_packet_barrier_and(&barrier_pkt, signals_in_pkt[0], signals_in_pkt[1],
                              signals_in_pkt[2], signals_in_pkt[3],
                              signals_in_pkt[4]);
-      hsa_amd_signal_create_on_agent(1, 0, nullptr,
-                                     _air_host_active_segment.agent, 0,
-                                     &barrier_pkt.completion_signal);
+      // hsa_amd_signal_create_on_agent(1, 0, nullptr,
+      //                                _air_host_active_segment.agent, 0,
+      //                                &barrier_pkt.completion_signal);
       air_queue_dispatch(_air_host_active_segment.q, packet_id, wr_idx,
                          &barrier_pkt);
 
