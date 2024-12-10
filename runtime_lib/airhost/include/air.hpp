@@ -11,6 +11,7 @@
 #include "air_host.h"
 
 #include <stdint.h>
+#include <string>
 #include <vector>
 
 template <typename T>
@@ -27,4 +28,11 @@ uint64_t air_wait_all(std::vector<uint64_t> &signals);
 hsa_status_t air_load_airbin(hsa_agent_t *agent, hsa_queue_t *q,
                              const char *filename, uint8_t column,
                              uint32_t device_id = 0);
+
+hsa_status_t run_kernel(const std::string &pdi_file,
+                        const std::string &insts_file,
+                        std::vector<void *> &args);
+// temporary function to dispatch the active segment
+hsa_status_t dispatch_segment(std::vector<void *> &args);
+
 #endif

@@ -1,0 +1,10 @@
+//===- run.lit ------------------------------------------------------------===//
+//
+// Copyright (C) 2025, Advanced Micro Devices, Inc.
+// SPDX-License-Identifier: MIT
+//
+//===----------------------------------------------------------------------===//
+
+// RUN: %PYTHON %S/gen_and_run.py | FileCheck %s
+
+// CHECK: PASS!

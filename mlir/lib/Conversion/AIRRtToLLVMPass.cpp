@@ -35,7 +35,7 @@ namespace {
 #define GEN_PASS_DEF_AIRRTTOLLVM
 #include "air/Conversion/Passes.h.inc"
 
-// struct shim_desc_t {
+// struct herd_shim_desc_t {
 //   int64_t *location_data;
 //   int64_t *channel_data;
 // }
@@ -47,6 +47,23 @@ LLVM::LLVMStructType getShimDescriptorType(MLIRContext *ctx) {
                                               // int64_t[64]* channel data
                                               LLVM::LLVMPointerType::get(ctx),
                                           });
+}
+
+// struct segment_shim_desc_t {
+//   int32_t id;
+//   int32_t row;
+//   int32_t col;
+//   int32_t location;
+//   int32_t channel;
+// }
+LLVM::LLVMStructType getSegmentShimDescriptorType(MLIRContext *ctx) {
+  return LLVM::LLVMStructType::getLiteral(ctx, {
+                                                   IntegerType::get(ctx, 32),
+                                                   IntegerType::get(ctx, 32),
+                                                   IntegerType::get(ctx, 32),
+                                                   IntegerType::get(ctx, 32),
+                                                   IntegerType::get(ctx, 32),
+                                               });
 }
 
 // struct herd_desc_t {
@@ -84,6 +101,10 @@ LLVM::LLVMStructType getSegmentDescriptorType(MLIRContext *ctx,
                IntegerType::get(ctx, 64),
                // air_herd_desc_t *herd_descs[herd_length];
                LLVM::LLVMPointerType::get(ctx),
+               // uint64_t shim_desc_length;
+               IntegerType::get(ctx, 64),
+               // air_segment_shim_desc_t *shim_descs[shim_desc_length];
+               LLVM::LLVMPointerType::get(ctx),
            });
 };
 
@@ -115,6 +136,69 @@ LLVM::GlobalOp getOrCreateAIRString(OpBuilder builder, ModuleOp module,
         llvmSymbolName, builder.getStringAttr(str));
   }
   return cast<LLVM::GlobalOp>(global);
+}
+
+LLVM::GlobalOp createSegmentShimDescriptor(OpBuilder builder, ModuleOp module,
+                                           ArrayAttr shim_attr) {
+  OpBuilder::InsertionGuard guard(builder);
+  builder.setInsertionPointToStart(module.getBody());
+
+  auto ctx = module.getContext();
+  auto loc = builder.getUnknownLoc();
+  auto descTy = getSegmentShimDescriptorType(ctx);
+  auto arrayTy = LLVM::LLVMArrayType::get(descTy, shim_attr.size());
+
+  // construct the location data global array + initializer
+  std::string str_name = "__airrt_segment_shim_data";
+  int which_try = 0;
+  while (module.lookupSymbol(str_name))
+    str_name = str_name + "_" + std::to_string(++which_try);
+  auto arrayGlobal = builder.create<LLVM::GlobalOp>(
+      loc, arrayTy, /*isConstant=*/true, LLVM::Linkage::Internal, str_name,
+      /*value=*/Attribute());
+
+  builder.createBlock(&arrayGlobal.getInitializerRegion());
+  Value data = builder.create<LLVM::UndefOp>(loc, arrayTy);
+  int idx = 0;
+  for (auto &shim_alloc : shim_attr) {
+    auto shim_alloc_dict = llvm::cast<DictionaryAttr>(shim_alloc);
+
+    auto id = llvm::cast<IntegerAttr>(shim_alloc_dict.get("id")).getInt();
+    auto c = builder.create<LLVM::ConstantOp>(loc, IntegerType::get(ctx, 32),
+                                              builder.getI64IntegerAttr(id));
+    data = builder.create<LLVM::InsertValueOp>(
+        loc, data, c, builder.getDenseI64ArrayAttr({idx, 0}));
+
+    auto row = llvm::cast<IntegerAttr>(shim_alloc_dict.get("row")).getInt();
+    c = builder.create<LLVM::ConstantOp>(loc, IntegerType::get(ctx, 32),
+                                         builder.getI64IntegerAttr(row));
+    data = builder.create<LLVM::InsertValueOp>(
+        loc, data, c, builder.getDenseI64ArrayAttr({idx, 1}));
+
+    auto col = llvm::cast<IntegerAttr>(shim_alloc_dict.get("col")).getInt();
+    c = builder.create<LLVM::ConstantOp>(loc, IntegerType::get(ctx, 32),
+                                         builder.getI64IntegerAttr(col));
+    data = builder.create<LLVM::InsertValueOp>(
+        loc, data, c, builder.getDenseI64ArrayAttr({idx, 2}));
+
+    auto location =
+        llvm::cast<IntegerAttr>(shim_alloc_dict.get("location")).getInt();
+    c = builder.create<LLVM::ConstantOp>(loc, IntegerType::get(ctx, 32),
+                                         builder.getI64IntegerAttr(location));
+    data = builder.create<LLVM::InsertValueOp>(
+        loc, data, c, builder.getDenseI64ArrayAttr({idx, 3}));
+
+    auto channel =
+        llvm::cast<IntegerAttr>(shim_alloc_dict.get("channel")).getInt();
+    c = builder.create<LLVM::ConstantOp>(loc, IntegerType::get(ctx, 32),
+                                         builder.getI64IntegerAttr(channel));
+    data = builder.create<LLVM::InsertValueOp>(
+        loc, data, c, builder.getDenseI64ArrayAttr({idx, 4}));
+    idx++;
+  }
+  builder.create<LLVM::ReturnOp>(loc, data);
+
+  return arrayGlobal;
 }
 
 LLVM::GlobalOp
@@ -163,7 +247,7 @@ createSegmentDescriptor(OpBuilder builder, ModuleOp module,
   auto descGlobal = builder.create<LLVM::GlobalOp>(
       loc, descTy, /*isConstant=*/true, LLVM::Linkage::External, str_name,
       /*value=*/Attribute());
-  if (1) {
+  {
     OpBuilder::InsertionGuard guard(builder);
     builder.createBlock(&descGlobal.getInitializerRegion());
     Value desc = builder.create<LLVM::UndefOp>(loc, descTy);
@@ -201,6 +285,23 @@ createSegmentDescriptor(OpBuilder builder, ModuleOp module,
         loc, LLVM::LLVMPointerType::get(ctx), herd_descs_global_addr);
     desc = builder.create<LLVM::InsertValueOp>(loc, desc, herd_descs_ptr,
                                                builder.getDenseI64ArrayAttr(3));
+
+    // "dma_allocations" attribute is an array of DictAttr
+    ArrayAttr shim_attr = segment->getAttrOfType<ArrayAttr>("dma_allocations");
+
+    auto shim_desc = createSegmentShimDescriptor(builder, module, shim_attr);
+    auto shim_desc_len = builder.create<LLVM::ConstantOp>(
+        loc, IntegerType::get(ctx, 64),
+        builder.getI64IntegerAttr(shim_attr.size()));
+
+    desc = builder.create<LLVM::InsertValueOp>(loc, desc, shim_desc_len,
+                                               builder.getDenseI64ArrayAttr(4));
+
+    Value shimDescPtr = builder.create<LLVM::BitcastOp>(
+        loc, LLVM::LLVMPointerType::get(ctx),
+        builder.create<LLVM::AddressOfOp>(loc, shim_desc));
+    desc = builder.create<LLVM::InsertValueOp>(
+        loc, desc, shimDescPtr, builder.getDenseI64ArrayAttr({5}));
 
     builder.create<LLVM::ReturnOp>(loc, desc);
   }
@@ -466,6 +567,7 @@ public:
         herd_descs.push_back(
             createHerdDescriptor(rewriter, module, shim_desc, herd_meta));
       }
+
       segment_herd_count.push_back(herd_descs.size());
       segment_descs.push_back(
           createSegmentDescriptor(rewriter, module, herd_descs, segment_meta));
