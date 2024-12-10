@@ -4,8 +4,8 @@
 #ifndef RUNTIME_H_
 #define RUNTIME_H_
 
-#include <vector>
 #include <string>
+#include <vector>
 
 #include <hsa/hsa.h>
 #include <hsa/hsa_ext_amd.h>
@@ -22,7 +22,9 @@ public:
   void *AllocateMemory(size_t size);
   void FreeMemory(void *ptr);
 
-  hsa_status_t RunKernel(const std::string &pdi_file, const std::string &insts_file, std::vector<void *> &args);
+  hsa_status_t RunKernel(const std::string &pdi_file,
+                         const std::string &insts_file,
+                         std::vector<void *> &args);
   static Runtime *runtime_;
 
 private:
