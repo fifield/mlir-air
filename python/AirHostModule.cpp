@@ -6,13 +6,20 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "air.hpp"
+
+#include "hsa/hsa.h"
+#include <hsa/hsa_ext_amd.h>
+
 #include <iostream>
 #include <nanobind/nanobind.h>
+#include <nanobind/ndarray.h>
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/vector.h>
 
-#include "air.hpp"
-#include "hsa/hsa.h"
+#include <iostream>
+#include <sstream>
+#include <string>
 
 #define STRINGIFY(x) #x
 #define MACRO_STRINGIFY(x) STRINGIFY(x)
@@ -22,12 +29,50 @@ namespace nb = nanobind;
 namespace {
 void defineAIRHostModule(nb::module_ &m) {
 
-  m.def(
-      "init_libxaie", []() -> uint64_t { return (uint64_t)air_init_libxaie(); },
-      nb::rv_policy::reference);
+  // HSA helper classes
 
-  m.def("deinit_libxaie", [](uint64_t ctx) -> void {
-    air_deinit_libxaie((air_libxaie_ctx_t)ctx);
+  // hsa_agent_t
+  nb::class_<hsa_agent_t> Agent(m, "Agent");
+  Agent.def("__str__", [](const hsa_agent_t &self) -> std::string {
+    std::stringstream ss;
+    ss << "<hsa_agent_t at 0x" << std::hex << reinterpret_cast<uint64_t>(&self)
+       << ">";
+    return ss.str();
+  });
+  Agent.def("type", [](const hsa_agent_t &self) -> hsa_device_type_t {
+    hsa_device_type_t type;
+    hsa_agent_get_info(self, HSA_AGENT_INFO_DEVICE, &type);
+    return type;
+  });
+
+  // hsa_amd_memory_pool_t
+  nb::class_<hsa_amd_memory_pool_t> MemoryPool(m, "AmdMemoryPool");
+
+  // hsa_device_type_t
+  nb::enum_<hsa_device_type_t> HsaDeviceType(m, "DeviceType");
+  HsaDeviceType.value("HSA_DEVICE_TYPE_CPU", HSA_DEVICE_TYPE_CPU)
+      .value("HSA_DEVICE_TYPE_GPU", HSA_DEVICE_TYPE_GPU)
+      .value("HSA_DEVICE_TYPE_DSP", HSA_DEVICE_TYPE_DSP)
+      .value("HSA_DEVICE_TYPE_AIE", HSA_DEVICE_TYPE_AIE);
+
+  nb::class_<hsa_queue_t> Queue(m, "Queue");
+
+  // AIR host functions
+  m.def("allocate_memory", [](size_t size) -> nb::ndarray<nb::numpy, int8_t> {
+    void *mem = air_malloc(size);
+    std::cout << "Allocated memory at " << mem << "\n";
+    nb::capsule capsule(mem, [](void *mem) noexcept {
+      std::cout << "Deallocating memory at " << mem << "\n";
+      air_free(mem);
+    });
+    return nb::ndarray<nb::numpy, int8_t>(mem, {size}, capsule);
+  });
+
+  m.def("dispatch_segment", [](std::vector<nb::ndarray<>> &args) -> uint64_t {
+    std::vector<void *> arg_ptrs;
+    for (auto &arg : args)
+      arg_ptrs.push_back(arg.data());
+    return dispatch_segment(arg_ptrs);
   });
 
   m.def("init", []() -> uint64_t { return (uint64_t)air_init(); });
@@ -65,9 +110,8 @@ void defineAIRHostModule(nb::module_ &m) {
       });
 
   m.def("module_load_from_file",
-        [](const std::string &filename, hsa_agent_t *agent,
-           hsa_queue_t *q) -> air_module_handle_t {
-          return air_module_load_from_file(filename.c_str(), agent, q);
+        [](const std::string &filename) -> air_module_handle_t {
+          return air_module_load_from_file(filename.c_str());
         });
 
   m.def("module_unload", &air_module_unload);
@@ -75,18 +119,20 @@ void defineAIRHostModule(nb::module_ &m) {
   m.def("get_module_descriptor", &air_module_get_desc,
         nb::rv_policy::reference);
 
-  nb::class_<hsa_agent_t> Agent(m, "Agent");
-
   m.def(
       "get_agents",
       []() -> std::vector<hsa_agent_t> {
         std::vector<hsa_agent_t> agents;
-        air_get_agents(agents);
+        hsa_iterate_agents(
+            [](hsa_agent_t agent, void *data) {
+              reinterpret_cast<std::vector<hsa_agent_t> *>(data)->push_back(
+                  agent);
+              return HSA_STATUS_SUCCESS;
+            },
+            (void *)&agents);
         return agents;
       },
       nb::rv_policy::reference);
-
-  nb::class_<hsa_queue_t> Queue(m, "Queue");
 
   m.def(
       "queue_create",
@@ -110,21 +156,6 @@ void defineAIRHostModule(nb::module_ &m) {
         return q;
       },
       nb::rv_policy::reference);
-
-  m.def(
-      "read32", [](uint64_t addr) -> uint32_t { return air_read32(addr); },
-      nb::rv_policy::copy);
-
-  m.def("write32", [](uint64_t addr, uint32_t val) -> void {
-    return air_write32(addr, val);
-  });
-
-  m.def(
-      "get_tile_addr",
-      [](uint32_t col, uint32_t row) -> uint64_t {
-        return air_get_tile_addr(col, row);
-      },
-      nb::rv_policy::copy);
 }
 
 } // namespace
