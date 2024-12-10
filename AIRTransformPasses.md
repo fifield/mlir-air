@@ -4,6 +4,7 @@
 _Affine loop transformations_
 
 
+
 #### Options
 ```
 -affine-opt-tile-sizes      : Affine loop tiling sizes
@@ -537,6 +538,7 @@ iteration, by connecting them in the loop-carried dependency path.
 
 _Skeleton module op pass_
 
+
 ### `-air-fuse-channels`
 
 _Fuse multiple air.channel ops into one_
@@ -556,9 +558,11 @@ air.channel symbol.
 
 _Fuse parallel launch pass_
 
+
 ### `-air-herd-assign`
 
 _Transfor affine.for to affine.parallel_
+
 
 ### `-air-hoist-alloc-in-for-pattern`
 
@@ -597,6 +601,7 @@ hoisting them out of their previous parent loop.
 ### `-air-label-broadcast-channel-with-tile`
 
 _Label broadcasted channel ops with tile coordinates._
+
 
 ### `-air-label-scf-for-in-segment`
 
@@ -640,6 +645,7 @@ dialect.
 ### `-air-linalg-name`
 
 _Give linalg ops a LinalgTransformMarker string attribute if they don't already have one_
+
 
 ### `-air-linalg-op-stats`
 
@@ -813,6 +819,7 @@ module  {
 
 _Remove scf.parallel from inside herds by transforming them to scf.for._
 
+
 ### `-air-lower-linalg-tensors`
 
 _Lowering from linalg on tensors to loops_
@@ -841,6 +848,7 @@ edges which represent a ping-pong buffering scheduling.
 ### `-air-pipeline-reduce`
 
 _Turn a reduction dimension into a herd pipeline_
+
 
 
 #### Options
@@ -1036,6 +1044,7 @@ module  {
 _Renumber air dma op ids_
 
 
+
 #### Options
 ```
 -mode : In which hierarchy level to renumber the dma ops
@@ -1044,9 +1053,11 @@ _Renumber air dma op ids_
 
 _Convert functions to return their values with out parameters_
 
+
 ### `-air-rm-linalg-name`
 
 _Remove LinalgTransformMarker string attributes from linalg ops_
+
 
 ### `-air-specialize-channel-wrap-and-stride`
 
@@ -1063,9 +1074,14 @@ computation. This specialization involves transforming data movement operations
 into more optimized versions that are aware of the broadcast semantics.
 ### `-air-split-l2-memref`
 
-_Split L2 memref into smaller buffers if it couldn't fit with the buffer harware constraints_
+_Split L2 memref into smaller buffers to better fit with the data movement harware constraints_
 
-  Transforms the input IR by splitting certain L2 memory references (`memrefs`) to adhere to AIE memtile-specific buffer and DMA channel constraints or optimization opportunities.
+  Checks if any of the `air.segment` op is implicitly allocated to more than one physical L2 memory tiles.
+  If true, then transforms them by splitting their L2 memory references (`memrefs`) into multiple allocations of same or smaller size, such that they can be distributed across those physical memory tiles.
+  Such transformation can optimize the IR's hardware mapping, given that the L2 memory tile has a finite number of DMA channels available to move data to and from compute tiles.
+
+  To check if any `air.segment` op can be allocated to more than one physical L2 memory tiles, the option `tiles-per-l2-tile` is used to specify in the target architecture how many compute tiles are in close affinity to each L2 memory tile, i.e. how many compute tiles can efficiently communicate to one L2 memory tile.
+  If any `air.segment` op must be allocated to more compute tiles than this number, then that means the `air.segment` op can allocate L2 `memrefs` to multiple L2 memory tiles.
 
   Example:
 
@@ -1207,9 +1223,15 @@ _Split L2 memref into smaller buffers if it couldn't fit with the buffer harware
     air.launch_terminator
   }
   ```
+
+#### Options
+```
+-tiles-per-l2-tile : Number of compute tiles per L2 memory tile. Used to estimate if an air.segment shall allocate to multiple L2 memory tiles, and therefore requires L2 memref splitting.
+```
 ### `-air-transform`
 
 _Transform IR with transform dialect_
+
 
 
 #### Options
