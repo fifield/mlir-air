@@ -6,13 +6,20 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "air.hpp"
+
+#include "hsa/hsa.h"
+#include <hsa/hsa_ext_amd.h>
+
 #include <iostream>
 #include <nanobind/nanobind.h>
+#include <nanobind/ndarray.h>
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/vector.h>
 
-#include "air.hpp"
-#include "hsa/hsa.h"
+#include <iostream>
+#include <sstream>
+#include <string>
 
 #define STRINGIFY(x) #x
 #define MACRO_STRINGIFY(x) STRINGIFY(x)
@@ -21,6 +28,60 @@ namespace nb = nanobind;
 
 namespace {
 void defineAIRHostModule(nb::module_ &m) {
+
+  // HSA helper classes
+
+  // hsa_agent_t
+  nb::class_<hsa_agent_t> Agent(m, "Agent");
+  Agent.def("__str__", [](const hsa_agent_t &self) -> std::string {
+    std::stringstream ss;
+    ss << "<hsa_agent_t at 0x" << std::hex << reinterpret_cast<uint64_t>(&self)
+       << ">";
+    return ss.str();
+  });
+  Agent.def("type", [](const hsa_agent_t &self) -> hsa_device_type_t {
+    hsa_device_type_t type;
+    hsa_agent_get_info(self, HSA_AGENT_INFO_DEVICE, &type);
+    return type;
+  });
+
+  // hsa_amd_memory_pool_t
+  nb::class_<hsa_amd_memory_pool_t> MemoryPool(m, "AmdMemoryPool");
+
+  // hsa_device_type_t
+  nb::enum_<hsa_device_type_t> HsaDeviceType(m, "DeviceType");
+  HsaDeviceType.value("HSA_DEVICE_TYPE_CPU", HSA_DEVICE_TYPE_CPU)
+      .value("HSA_DEVICE_TYPE_GPU", HSA_DEVICE_TYPE_GPU)
+      .value("HSA_DEVICE_TYPE_DSP", HSA_DEVICE_TYPE_DSP)
+      .value("HSA_DEVICE_TYPE_AIE", HSA_DEVICE_TYPE_AIE);
+
+  nb::class_<hsa_queue_t> Queue(m, "Queue");
+
+  // AIR host functions
+  m.def("allocate_memory", [](size_t size) -> nb::ndarray<nb::numpy, uint8_t> {
+    void *mem = air_malloc(size);
+    std::cout << "Allocated memory at " << mem << std::endl;
+    nb::capsule capsule(mem, [](void *mem) noexcept {
+      std::cout << "Deallocating memory at " << mem << std::endl;
+      air_free(mem);
+    });
+    return nb::ndarray<nb::numpy, uint8_t>(mem, {size}, capsule);
+  });
+
+  m.def("run",
+        [](const std::string &pdi_file, const std::string &insts_file,
+           std::vector<nb::ndarray<uint8_t>> &args) -> uint64_t {
+          std::cout << "Running " << insts_file << " with " << pdi_file
+                    << std::endl;
+          for (auto &arg : args) {
+            std::cout << "arg size: " << arg.size() << std::endl;
+          }
+          std::vector<void *> arg_ptrs;
+          for (auto &arg : args) {
+            arg_ptrs.push_back(arg.data());
+          }
+          return run_kernel(pdi_file, insts_file, arg_ptrs);
+        });
 
   m.def(
       "init_libxaie", []() -> uint64_t { return (uint64_t)air_init_libxaie(); },
@@ -75,18 +136,23 @@ void defineAIRHostModule(nb::module_ &m) {
   m.def("get_module_descriptor", &air_module_get_desc,
         nb::rv_policy::reference);
 
-  nb::class_<hsa_agent_t> Agent(m, "Agent");
+  // nb::class_<hsa_agent_t> Agent(m, "Agent");
 
   m.def(
       "get_agents",
       []() -> std::vector<hsa_agent_t> {
         std::vector<hsa_agent_t> agents;
-        air_get_agents(agents);
+        hsa_iterate_agents(
+            [](hsa_agent_t agent, void *data) {
+              static_cast<std::vector<hsa_agent_t> *>(data)->push_back(agent);
+              return HSA_STATUS_SUCCESS;
+            },
+            (void *)&agents);
         return agents;
       },
       nb::rv_policy::reference);
 
-  nb::class_<hsa_queue_t> Queue(m, "Queue");
+  // nb::class_<hsa_queue_t> Queue(m, "Queue");
 
   m.def(
       "queue_create",
@@ -119,12 +185,6 @@ void defineAIRHostModule(nb::module_ &m) {
     return air_write32(addr, val);
   });
 
-  m.def(
-      "get_tile_addr",
-      [](uint32_t col, uint32_t row) -> uint64_t {
-        return air_get_tile_addr(col, row);
-      },
-      nb::rv_policy::copy);
 }
 
 } // namespace
