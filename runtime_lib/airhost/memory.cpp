@@ -119,7 +119,8 @@ static void air_mem_shim_nd_memcpy_queue_impl(
     // signals
     if (s) {
       // Fire off the packet
-      // hsa_amd_signal_create_on_agent(1, 0, nullptr, _air_host_active_herd.agent,
+      // hsa_amd_signal_create_on_agent(1, 0, nullptr,
+      // _air_host_active_herd.agent,
       //                                0, &pkt.completion_signal);
       air_queue_dispatch(_air_host_active_herd.q, packet_id, wr_idx, &pkt);
 
