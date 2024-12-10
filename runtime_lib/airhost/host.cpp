@@ -123,8 +123,9 @@ hsa_status_t air_shut_down() {
   return HSA_STATUS_SUCCESS;
 }
 
-hsa_status_t run_kernel(const std::string &pdi_file, const std::string &insts_file, std::vector<void *> &args)
-{
+hsa_status_t run_kernel(const std::string &pdi_file,
+                        const std::string &insts_file,
+                        std::vector<void *> &args) {
   return air::rocm::Runtime::runtime_->RunKernel(pdi_file, insts_file, args);
 }
 
