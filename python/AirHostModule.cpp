@@ -187,15 +187,6 @@ void defineAIRHostModule(nb::module_ &m) {
         return q;
       },
       nb::rv_policy::reference);
-
-  m.def(
-      "read32", [](uint64_t addr) -> uint32_t { return air_read32(addr); },
-      nb::rv_policy::copy);
-
-  m.def("write32", [](uint64_t addr, uint32_t val) -> void {
-    return air_write32(addr, val);
-  });
-
 }
 
 } // namespace
