@@ -47,7 +47,6 @@ private:
 
   std::optional<std::size_t> getAllocationSize(void *ptr);
 
-
   hsa_amd_memory_pool_t global_mem_pool_;
   hsa_amd_memory_pool_t global_dev_pool_;
   hsa_queue_t *aie_queue_;
