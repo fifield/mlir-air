@@ -45,6 +45,10 @@
 
 #define BOUNCE_BUFFER_SIZE 0x8000
 
+#define ROCR_XDNA 1
+
+#define VERBOSE true
+
 // temporary solution to stash some state
 extern "C" {
 
@@ -126,7 +130,26 @@ hsa_status_t air_shut_down() {
 hsa_status_t run_kernel(const std::string &pdi_file,
                         const std::string &insts_file,
                         std::vector<void *> &args) {
-  return air::rocm::Runtime::runtime_->RunKernel(pdi_file, insts_file, args);
+  return air::rocm::Runtime::getRuntime()->RunKernel(pdi_file, insts_file, args);
+}
+
+hsa_status_t dispatch_sequence(const std::string &insts_file,
+                        std::vector<void *> &args) {
+                          
+  std::vector<uint32_t> sequence_vector;
+
+  std::ifstream bin_file(insts_file,
+                         std::ios::binary | std::ios::ate | std::ios::in);
+  if (bin_file.fail())
+    return HSA_STATUS_SUCCESS;
+
+  auto size(bin_file.tellg());
+  bin_file.seekg(0, std::ios::beg);
+
+  std::string val;
+  while (bin_file >> val)
+    sequence_vector.push_back(std::stoul(val, nullptr, 16));
+  return air::rocm::Runtime::getRuntime()->dispatchRutimeSequence(sequence_vector, args);
 }
 
 air_libxaie_ctx_t air_get_libxaie_ctx() {
@@ -190,10 +213,7 @@ void air_deinit_libxaie(air_libxaie_ctx_t _xaie) {
   free(xaie);
 }
 
-air_module_handle_t air_module_load_from_file(const char *filename,
-                                              hsa_agent_t *agent,
-                                              hsa_queue_t *q,
-                                              uint32_t device_id) {
+air_module_handle_t air_module_load_from_file(const char *filename) {
   if (_air_host_active_module)
     air_module_unload(_air_host_active_module);
 
@@ -203,6 +223,9 @@ air_module_handle_t air_module_load_from_file(const char *filename,
     printf("%s\n", dlerror());
     return 0;
   }
+  auto q = air::rocm::Runtime::getRuntime()->getAieQueue();
+  auto agent = &air::rocm::Runtime::getRuntime()->getAieAgents()[0];
+
   _air_host_active_module = (air_module_handle_t)_handle;
   _air_host_active_herd = {q, agent, nullptr};
   _air_host_active_segment = {q, agent, nullptr};
@@ -291,7 +314,51 @@ air_module_desc_t *air_module_get_desc(air_module_handle_t handle) {
                                     "__airrt_module_descriptor");
 }
 
+static
+uint64_t npu_segment_load(const char *name) {
+  
+  auto segment_desc = air_segment_get_desc(_air_host_active_module, name);
+  if (!segment_desc) {
+    printf("Failed to locate segment descriptor '%s'!\n", name);
+    assert(0);
+    return 0;
+  }
+
+  std::string segment_name(segment_desc->name, segment_desc->name_length);
+
+  if (VERBOSE)
+    std::cout << "load segment: " << segment_name << "\n";
+
+  std::string func_name = "__airrt_" + segment_name + "_aie_functions";
+  air_rt_aie_functions_t *mlir = (air_rt_aie_functions_t *)dlsym(
+      (void *)_air_host_active_module, func_name.c_str());
+
+  if (!mlir) {
+    printf("Failed to locate segment '%s' configuration functions!\n",
+           segment_name.c_str());
+    assert(0);
+    return 0;
+  }
+  std::string pdi_file = "/work/acdc/tmp/npu.air.mlir.prj/design.pdi";
+  hsa_status_t r = air::rocm::Runtime::getRuntime()->loadSegmentPdi(pdi_file);
+  if (r != HSA_STATUS_SUCCESS) {
+    printf("Failed to load segment PDI file '%s'!\n", pdi_file.c_str());
+    assert(0);
+    return 0;
+  }
+
+  if (VERBOSE)
+    std::cout << "loaded segment from pdi: '" << pdi_file << "'\n";
+
+  _air_host_active_segment.segment_desc = segment_desc;
+  return reinterpret_cast<uint64_t>(segment_desc);
+}
+
 uint64_t air_segment_load(const char *name) {
+
+#ifdef ROCR_XDNA
+  return npu_segment_load(name);
+#endif
 
   assert(_air_host_active_libxaie);
 
@@ -397,6 +464,7 @@ uint64_t air_herd_load(const char *name) {
 }
 
 uint64_t air_wait_all(std::vector<uint64_t> &signals) {
+  return 0;
   hsa_queue_t *q = _air_host_active_segment.q;
   if (!q) {
     printf("WARNING: no queue provided, air_wait_all will return without "
