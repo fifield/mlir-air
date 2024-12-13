@@ -433,9 +433,8 @@ void createAIEModulesAndOutlineCores(
                      StringAttr::get(builder.getContext(), segment_name));
     AIE::DeviceOp::ensureTerminator(aie_dev.getRegion(), builder,
                                     aie_dev.getLoc());
-    seg.walk([&](xilinx::air::HerdOp h) {
-      aie_modules.push_back({aie_dev, h});
-    });
+    seg.walk(
+        [&](xilinx::air::HerdOp h) { aie_modules.push_back({aie_dev, h}); });
     // If the device has memtiles, then outline memtiles
     if (aie_dev.getTargetModel().getNumMemTileRows()) {
       outlineAIEMemtiles(builder, aie_dev, seg, options);
@@ -2174,7 +2173,8 @@ public:
   //     AIE::TileOp tileOp = t.getDmaTile();
   //     int64_t col = t.col - col_offset;
   //     int64_t row = t.row - row_offset;
-  //     int64_t chan = dir == AIE::DMAChannelDir::MM2S ? t.dma_channel.channel + 2
+  //     int64_t chan = dir == AIE::DMAChannelDir::MM2S ? t.dma_channel.channel
+  //     + 2
   //                                                    : t.dma_channel.channel;
 
   //     for (int64_t id : t.dma_id) {
@@ -2427,20 +2427,24 @@ public:
                 builder.getI64IntegerAttr(tileOp.getCol()),
                 builder.getBoolAttr(false));
             SmallVector<NamedAttribute, 5> attrs;
-            attrs.push_back(NamedAttribute(StringAttr::get(ctx, "id"),
-                                            builder.getI64IntegerAttr(original_id)));
-            attrs.push_back(NamedAttribute(StringAttr::get(ctx, "row"),
-                                            builder.getI64IntegerAttr(tileOp.getRow())));
-            attrs.push_back(NamedAttribute(StringAttr::get(ctx, "col"),
-                                            builder.getI64IntegerAttr(tileOp.getCol())));
-            attrs.push_back(NamedAttribute(StringAttr::get(ctx, "channel"),
-                                            builder.getI64IntegerAttr(dir == AIE::DMAChannelDir::MM2S ? chan + 2
-                                                     : chan)));
+            attrs.push_back(
+                NamedAttribute(StringAttr::get(ctx, "id"),
+                               builder.getI64IntegerAttr(original_id)));
+            attrs.push_back(
+                NamedAttribute(StringAttr::get(ctx, "row"),
+                               builder.getI64IntegerAttr(tileOp.getRow())));
+            attrs.push_back(
+                NamedAttribute(StringAttr::get(ctx, "col"),
+                               builder.getI64IntegerAttr(tileOp.getCol())));
+            attrs.push_back(NamedAttribute(
+                StringAttr::get(ctx, "channel"),
+                builder.getI64IntegerAttr(
+                    dir == AIE::DMAChannelDir::MM2S ? chan + 2 : chan)));
             attrs.push_back(
                 NamedAttribute(StringAttr::get(ctx, "location"),
-                                builder.getI64IntegerAttr(tileOp.getCol())));
+                               builder.getI64IntegerAttr(tileOp.getCol())));
             push_back_if_unique<Attribute>(dma_allocations,
-                                            DictionaryAttr::get(ctx, attrs));
+                                           DictionaryAttr::get(ctx, attrs));
           }
           continue;
         }
@@ -2486,21 +2490,25 @@ public:
           builder.create<memref::GlobalOp>(builder.getUnknownLoc(), sym_name,
                                            builder.getStringAttr("public"),
                                            memref_ty, nullptr, false, nullptr);
-            SmallVector<NamedAttribute, 5> attrs;
-            attrs.push_back(NamedAttribute(StringAttr::get(ctx, "id"),
-                                            builder.getI64IntegerAttr(original_id)));
-            attrs.push_back(NamedAttribute(StringAttr::get(ctx, "row"),
-                                            builder.getI64IntegerAttr(tileOp.getRow())));
-            attrs.push_back(NamedAttribute(StringAttr::get(ctx, "col"),
-                                            builder.getI64IntegerAttr(tileOp.getCol())));
-            attrs.push_back(NamedAttribute(StringAttr::get(ctx, "channel"),
-                                            builder.getI64IntegerAttr(dir == AIE::DMAChannelDir::MM2S ? chan + 2
-                                                     : chan)));
-            attrs.push_back(
-                NamedAttribute(StringAttr::get(ctx, "location"),
-                                builder.getI64IntegerAttr(tileOp.getCol())));
-            push_back_if_unique<Attribute>(dma_allocations,
-                                            DictionaryAttr::get(ctx, attrs));
+          SmallVector<NamedAttribute, 5> attrs;
+          attrs.push_back(
+              NamedAttribute(StringAttr::get(ctx, "id"),
+                             builder.getI64IntegerAttr(original_id)));
+          attrs.push_back(
+              NamedAttribute(StringAttr::get(ctx, "row"),
+                             builder.getI64IntegerAttr(tileOp.getRow())));
+          attrs.push_back(
+              NamedAttribute(StringAttr::get(ctx, "col"),
+                             builder.getI64IntegerAttr(tileOp.getCol())));
+          attrs.push_back(NamedAttribute(
+              StringAttr::get(ctx, "channel"),
+              builder.getI64IntegerAttr(
+                  dir == AIE::DMAChannelDir::MM2S ? chan + 2 : chan)));
+          attrs.push_back(
+              NamedAttribute(StringAttr::get(ctx, "location"),
+                             builder.getI64IntegerAttr(tileOp.getCol())));
+          push_back_if_unique<Attribute>(dma_allocations,
+                                         DictionaryAttr::get(ctx, attrs));
         }
       }
     }
@@ -3821,9 +3829,8 @@ FailureOr<ModuleOp> convertAIRToAIE(mlir::RewriterBase &rewriter,
                                        /*.ctrl_packet = */ false,
                                        /* .device = */ *device};
   std::vector<std::pair<ModuleOp, xilinx::air::HerdOp>> aie_modules;
-  p.walk([&](xilinx::air::HerdOp h) {
-    aie_modules.push_back({aie_module, h});
-  });
+  p.walk(
+      [&](xilinx::air::HerdOp h) { aie_modules.push_back({aie_module, h}); });
   std::map<AIE::TileOp, air::HerdOp> tileToHerdMap;
   for (auto &p : aie_modules) {
     ModuleOp aie_module = std::get<0>(p);

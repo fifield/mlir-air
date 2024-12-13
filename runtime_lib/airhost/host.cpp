@@ -130,12 +130,13 @@ hsa_status_t air_shut_down() {
 hsa_status_t run_kernel(const std::string &pdi_file,
                         const std::string &insts_file,
                         std::vector<void *> &args) {
-  return air::rocm::Runtime::getRuntime()->RunKernel(pdi_file, insts_file, args);
+  return air::rocm::Runtime::getRuntime()->RunKernel(pdi_file, insts_file,
+                                                     args);
 }
 
 hsa_status_t dispatch_sequence(const std::string &insts_file,
-                        std::vector<void *> &args) {
-                          
+                               std::vector<void *> &args) {
+
   std::vector<uint32_t> sequence_vector;
 
   std::ifstream bin_file(insts_file,
@@ -149,7 +150,8 @@ hsa_status_t dispatch_sequence(const std::string &insts_file,
   std::string val;
   while (bin_file >> val)
     sequence_vector.push_back(std::stoul(val, nullptr, 16));
-  return air::rocm::Runtime::getRuntime()->dispatchRutimeSequence(sequence_vector, args);
+  return air::rocm::Runtime::getRuntime()->dispatchRutimeSequence(
+      sequence_vector, args);
 }
 
 air_libxaie_ctx_t air_get_libxaie_ctx() {
@@ -314,9 +316,8 @@ air_module_desc_t *air_module_get_desc(air_module_handle_t handle) {
                                     "__airrt_module_descriptor");
 }
 
-static
-uint64_t npu_segment_load(const char *name) {
-  
+static uint64_t npu_segment_load(const char *name) {
+
   auto segment_desc = air_segment_get_desc(_air_host_active_module, name);
   if (!segment_desc) {
     printf("Failed to locate segment descriptor '%s'!\n", name);
