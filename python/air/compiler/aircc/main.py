@@ -476,7 +476,6 @@ def run(mlir_module, args=None):
             aiecc.run(air_to_npu_module, aiecc_options)
 
 
-
 def main():
     global opts
     opts = cl_arguments.parse_args()
