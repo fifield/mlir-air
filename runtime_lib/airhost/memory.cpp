@@ -78,14 +78,13 @@ static void air_mem_shim_nd_memcpy_queue_impl(
       break;
     }
   }
-  printf(
-      "Do transfer %p with id %d on behalf of x=%ld, y=%ld space %d, col \
+  printf("Do transfer %p with id %d on behalf of x=%ld, y=%ld space %d, col \
   %d, dir %d, chan %d, offset [%ld,%ld,%ld,%ld], length [%ld,%ld,%ld,%ld], \
   stride [%ld,%ld,%ld]\n",
-      t->data, id, x, y, space, shim_col, shim_chan >= 2,
-      (shim_chan >= 2) ? shim_chan - 2 : shim_chan, offset_3, offset_2,
-      offset_1, offset_0, length_4d, length_3d, length_2d, length_1d,
-      stride_4d, stride_3d, stride_2d);
+         t->data, id, x, y, space, shim_col, shim_chan >= 2,
+         (shim_chan >= 2) ? shim_chan - 2 : shim_chan, offset_3, offset_2,
+         offset_1, offset_0, length_4d, length_3d, length_2d, length_1d,
+         stride_4d, stride_3d, stride_2d);
   return;
   // printf("id %d, x %ld, y %ld, space %d, offset [%ld,%ld,%ld,%ld], length \
   // [%ld,%ld,%ld,%ld], stride [%ld,%ld,%ld]\n",
