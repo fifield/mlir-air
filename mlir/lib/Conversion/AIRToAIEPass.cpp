@@ -2139,67 +2139,67 @@ public:
     return success();
   }
 
-  void getDmaAllocationMetadata(OpBuilder builder, MLIRContext *ctx,
-                                air::HierarchyInterface op,
-                                std::vector<allocation_info_t> allocs,
-                                AIE::DMAChannelDir dir,
-                                std::map<int, int> chan_renumber_reverse_map,
-                                std::vector<Attribute> &dma_allocations) {
+  // void getDmaAllocationMetadata(OpBuilder builder, MLIRContext *ctx,
+  //                               air::HierarchyInterface op,
+  //                               std::vector<allocation_info_t> allocs,
+  //                               AIE::DMAChannelDir dir,
+  //                               std::map<int, int> chan_renumber_reverse_map,
+  //                               std::vector<Attribute> &dma_allocations) {
 
-    std::set<int64_t> dma_ids;
-    op.walk([&](air::MemcpyInterface o) {
-      if (isa<air::HerdOp>(op))
-        dma_ids.insert(o.getId());
-      else if (!o->getParentOfType<air::HerdOp>())
-        dma_ids.insert(o.getId());
-    });
+  //   std::set<int64_t> dma_ids;
+  //   op.walk([&](air::MemcpyInterface o) {
+  //     if (isa<air::HerdOp>(op))
+  //       dma_ids.insert(o.getId());
+  //     else if (!o->getParentOfType<air::HerdOp>())
+  //       dma_ids.insert(o.getId());
+  //   });
 
-    int64_t col_offset = 0;
-    int64_t row_offset = 0;
-    if (auto herd = dyn_cast<air::HerdOp>(op.getOperation())) {
-      auto c = herd.getColOffset();
-      auto r = herd.getRowOffset();
-      col_offset = c ? *c : 0;
-      row_offset = r ? *r : 0;
-    } else if (auto seg = dyn_cast<air::SegmentOp>(op.getOperation())) {
-      auto c = seg.getColOffset();
-      auto r = seg.getRowOffset();
-      col_offset = c ? *c : 0;
-      row_offset = r ? *r : 0;
-    } else {
-      return; // failure();
-    }
+  //   int64_t col_offset = 0;
+  //   int64_t row_offset = 0;
+  //   if (auto herd = dyn_cast<air::HerdOp>(op.getOperation())) {
+  //     auto c = herd.getColOffset();
+  //     auto r = herd.getRowOffset();
+  //     col_offset = c ? *c : 0;
+  //     row_offset = r ? *r : 0;
+  //   } else if (auto seg = dyn_cast<air::SegmentOp>(op.getOperation())) {
+  //     auto c = seg.getColOffset();
+  //     auto r = seg.getRowOffset();
+  //     col_offset = c ? *c : 0;
+  //     row_offset = r ? *r : 0;
+  //   } else {
+  //     return; // failure();
+  //   }
 
-    for (auto &t : allocs) {
-      AIE::TileOp tileOp = t.getDmaTile();
-      int64_t col = t.col - col_offset;
-      int64_t row = t.row - row_offset;
-      int64_t chan = dir == AIE::DMAChannelDir::MM2S ? t.dma_channel.channel + 2
-                                                     : t.dma_channel.channel;
+  //   for (auto &t : allocs) {
+  //     AIE::TileOp tileOp = t.getDmaTile();
+  //     int64_t col = t.col - col_offset;
+  //     int64_t row = t.row - row_offset;
+  //     int64_t chan = dir == AIE::DMAChannelDir::MM2S ? t.dma_channel.channel + 2
+  //                                                    : t.dma_channel.channel;
 
-      for (int64_t id : t.dma_id) {
-        int original_id = chan_renumber_reverse_map.size()
-                              ? chan_renumber_reverse_map[id]
-                              : id;
-        if (dma_ids.count(original_id) == 0)
-          continue;
-        SmallVector<NamedAttribute, 5> attrs;
-        attrs.push_back(NamedAttribute(StringAttr::get(ctx, "id"),
-                                       builder.getI64IntegerAttr(original_id)));
-        attrs.push_back(NamedAttribute(StringAttr::get(ctx, "row"),
-                                       builder.getI64IntegerAttr(row)));
-        attrs.push_back(NamedAttribute(StringAttr::get(ctx, "col"),
-                                       builder.getI64IntegerAttr(col)));
-        attrs.push_back(NamedAttribute(StringAttr::get(ctx, "channel"),
-                                       builder.getI64IntegerAttr(chan)));
-        attrs.push_back(
-            NamedAttribute(StringAttr::get(ctx, "location"),
-                           builder.getI64IntegerAttr(tileOp.getCol())));
-        push_back_if_unique<Attribute>(dma_allocations,
-                                       DictionaryAttr::get(ctx, attrs));
-      }
-    }
-  }
+  //     for (int64_t id : t.dma_id) {
+  //       int original_id = chan_renumber_reverse_map.size()
+  //                             ? chan_renumber_reverse_map[id]
+  //                             : id;
+  //       if (dma_ids.count(original_id) == 0)
+  //         assert(0);
+  //       SmallVector<NamedAttribute, 5> attrs;
+  //       attrs.push_back(NamedAttribute(StringAttr::get(ctx, "id"),
+  //                                      builder.getI64IntegerAttr(original_id)));
+  //       attrs.push_back(NamedAttribute(StringAttr::get(ctx, "row"),
+  //                                      builder.getI64IntegerAttr(row)));
+  //       attrs.push_back(NamedAttribute(StringAttr::get(ctx, "col"),
+  //                                      builder.getI64IntegerAttr(col)));
+  //       attrs.push_back(NamedAttribute(StringAttr::get(ctx, "channel"),
+  //                                      builder.getI64IntegerAttr(chan)));
+  //       attrs.push_back(
+  //           NamedAttribute(StringAttr::get(ctx, "location"),
+  //                          builder.getI64IntegerAttr(tileOp.getCol())));
+  //       push_back_if_unique<Attribute>(dma_allocations,
+  //                                      DictionaryAttr::get(ctx, attrs));
+  //     }
+  //   }
+  // }
 
   bool annotateMetadataPerShimAIRChannel(air::ChannelInterface chan_o,
                                          MemRefType memref_ty,
@@ -2381,7 +2381,8 @@ public:
   LogicalResult createShimDMAAllocationOps(
       OpBuilder builder, MLIRContext *ctx, air::HierarchyInterface op,
       std::vector<allocation_info_t> allocs, AIE::DMAChannelDir dir,
-      std::map<int, int> chan_renumber_reverse_map) {
+      std::map<int, int> chan_renumber_reverse_map,
+      std::vector<Attribute> &dma_allocations) {
 
     std::set<int32_t> dma_ids;
     op.walk([&](air::MemcpyInterface o) {
@@ -2425,6 +2426,21 @@ public:
                 builder.getI64IntegerAttr(chan),
                 builder.getI64IntegerAttr(tileOp.getCol()),
                 builder.getBoolAttr(false));
+            SmallVector<NamedAttribute, 5> attrs;
+            attrs.push_back(NamedAttribute(StringAttr::get(ctx, "id"),
+                                            builder.getI64IntegerAttr(original_id)));
+            attrs.push_back(NamedAttribute(StringAttr::get(ctx, "row"),
+                                            builder.getI64IntegerAttr(tileOp.getRow())));
+            attrs.push_back(NamedAttribute(StringAttr::get(ctx, "col"),
+                                            builder.getI64IntegerAttr(tileOp.getCol())));
+            attrs.push_back(NamedAttribute(StringAttr::get(ctx, "channel"),
+                                            builder.getI64IntegerAttr(dir == AIE::DMAChannelDir::MM2S ? chan + 2
+                                                     : chan)));
+            attrs.push_back(
+                NamedAttribute(StringAttr::get(ctx, "location"),
+                                builder.getI64IntegerAttr(tileOp.getCol())));
+            push_back_if_unique<Attribute>(dma_allocations,
+                                            DictionaryAttr::get(ctx, attrs));
           }
           continue;
         }
@@ -2470,6 +2486,21 @@ public:
           builder.create<memref::GlobalOp>(builder.getUnknownLoc(), sym_name,
                                            builder.getStringAttr("public"),
                                            memref_ty, nullptr, false, nullptr);
+            SmallVector<NamedAttribute, 5> attrs;
+            attrs.push_back(NamedAttribute(StringAttr::get(ctx, "id"),
+                                            builder.getI64IntegerAttr(original_id)));
+            attrs.push_back(NamedAttribute(StringAttr::get(ctx, "row"),
+                                            builder.getI64IntegerAttr(tileOp.getRow())));
+            attrs.push_back(NamedAttribute(StringAttr::get(ctx, "col"),
+                                            builder.getI64IntegerAttr(tileOp.getCol())));
+            attrs.push_back(NamedAttribute(StringAttr::get(ctx, "channel"),
+                                            builder.getI64IntegerAttr(dir == AIE::DMAChannelDir::MM2S ? chan + 2
+                                                     : chan)));
+            attrs.push_back(
+                NamedAttribute(StringAttr::get(ctx, "location"),
+                                builder.getI64IntegerAttr(tileOp.getCol())));
+            push_back_if_unique<Attribute>(dma_allocations,
+                                            DictionaryAttr::get(ctx, attrs));
         }
       }
     }
@@ -3480,86 +3511,70 @@ public:
 
       for (auto herd : herds) {
         std::vector<Attribute> dma_allocations;
-        if (!device.getTargetModel().hasProperty(AIE::AIETargetModel::IsNPU)) {
-          // AIE1 dma metadata format
-          getDmaAllocationMetadata(builder, ctx, herd, shimDmaAlloc.s2mm_allocs,
-                                   AIE::DMAChannelDir::S2MM,
-                                   chan_renumber_reverse_map, dma_allocations);
-          getDmaAllocationMetadata(builder, ctx, herd, shimDmaAlloc.mm2s_allocs,
-                                   AIE::DMAChannelDir::MM2S,
-                                   chan_renumber_reverse_map, dma_allocations);
 
-          auto segment_name =
-              device
-                  ->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName())
-                  .getValue();
-          auto segment_meta =
-              getOrCreateSegmentMetadata(module_meta, segment_name);
-          auto herd_meta = createHerdMetadata(segment_meta, herd);
-          herd_meta->setAttr("dma_allocations",
-                             ArrayAttr::get(ctx, dma_allocations));
-
-          // Control packet generation for AIE1 is not yet implemented.
-          if (options.use_packet_flow_at_shim_dmas) {
-            herd->emitOpError("control packet flow generation is not yet "
-                              "supported for AIE1.");
-            signalPassFailure();
-            return;
-          }
-        } else {
-          // AIE2 dma metadata format
-          builder.setInsertionPoint(device.getBody()->getTerminator());
-          if (failed(createShimDMAAllocationOps(
-                  builder, ctx, herd, shimDmaAlloc.s2mm_allocs,
-                  AIE::DMAChannelDir::S2MM, chan_renumber_reverse_map))) {
-            signalPassFailure();
-            return;
-          }
-          if (failed(createShimDMAAllocationOps(
-                  builder, ctx, herd, shimDmaAlloc.mm2s_allocs,
-                  AIE::DMAChannelDir::MM2S, chan_renumber_reverse_map))) {
-            signalPassFailure();
-            return;
-          }
+        if (isa<AIE::AIE1TargetModel>(device.getTargetModel()) &&
+            options.use_packet_flow_at_shim_dmas) {
+          herd->emitOpError("control packet flow generation is not yet "
+                            "supported for AIE1.");
+          signalPassFailure();
+          return;
         }
+
+        // AIE2 dma metadata format
+        builder.setInsertionPoint(device.getBody()->getTerminator());
+        if(failed(createShimDMAAllocationOps(
+            builder, ctx, herd, shimDmaAlloc.s2mm_allocs,
+            AIE::DMAChannelDir::S2MM, chan_renumber_reverse_map, dma_allocations))) {
+              signalPassFailure();
+              return;
+        }
+        if(failed(createShimDMAAllocationOps(
+            builder, ctx, herd, shimDmaAlloc.mm2s_allocs,
+            AIE::DMAChannelDir::MM2S, chan_renumber_reverse_map, dma_allocations))) {
+              signalPassFailure();
+              return;
+        }
+
+        auto segment_name =
+            device->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName())
+                .getValue();
+        auto segment_meta =
+            getOrCreateSegmentMetadata(module_meta, segment_name);
+        auto herd_meta = createHerdMetadata(segment_meta, herd);
+        herd_meta->setAttr("dma_allocations",
+                           ArrayAttr::get(ctx, dma_allocations));
       }
       for (auto seg : segs) {
         std::vector<Attribute> dma_allocations;
-        if (!device.getTargetModel().hasProperty(AIE::AIETargetModel::IsNPU)) {
-          // AIE1 memtile dma metadata format
-          getDmaAllocationMetadata(builder, ctx, seg, shimDmaAlloc.mm2s_allocs,
-                                   AIE::DMAChannelDir::MM2S,
-                                   chan_renumber_reverse_map, dma_allocations);
 
-          auto segment_name =
-              device
-                  ->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName())
-                  .getValue();
-          auto segment_meta =
-              getOrCreateSegmentMetadata(module_meta, segment_name);
-          segment_meta->setAttr("dma_allocations",
-                                ArrayAttr::get(ctx, dma_allocations));
-
-          // Control packet generation for AIE1 is not yet implemented.
-          if (options.use_packet_flow_at_shim_dmas)
-            seg->emitOpError("control packet flow generation is not yet "
-                             "supported for AIE1.");
-        } else {
-          // AIE2 memtile dma metadata format
-          builder.setInsertionPoint(device.getBody()->getTerminator());
-          if (failed(createShimDMAAllocationOps(
-                  builder, ctx, seg, shimDmaAlloc.s2mm_allocs,
-                  AIE::DMAChannelDir::S2MM, chan_renumber_reverse_map))) {
-            signalPassFailure();
-            return;
-          }
-          if (failed(createShimDMAAllocationOps(
-                  builder, ctx, seg, shimDmaAlloc.mm2s_allocs,
-                  AIE::DMAChannelDir::MM2S, chan_renumber_reverse_map))) {
-            signalPassFailure();
-            return;
-          }
+        if (isa<AIE::AIE1TargetModel>(device.getTargetModel()) &&
+            options.use_packet_flow_at_shim_dmas) {
+          seg->emitOpError("control packet flow generation is not yet "
+                           "supported for AIE1.");
+          signalPassFailure();
+          return;
         }
+        builder.setInsertionPoint(device.getBody()->getTerminator());
+        if (failed(createShimDMAAllocationOps(
+            builder, ctx, seg, shimDmaAlloc.s2mm_allocs,
+            AIE::DMAChannelDir::S2MM, chan_renumber_reverse_map, dma_allocations))) {
+              signalPassFailure();
+              return;
+        }
+        if (failed(createShimDMAAllocationOps(
+            builder, ctx, seg, shimDmaAlloc.mm2s_allocs,
+            AIE::DMAChannelDir::MM2S, chan_renumber_reverse_map, dma_allocations))) {
+              signalPassFailure();
+              return;
+        }
+
+        auto segment_name =
+            device->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName())
+                .getValue();
+        auto segment_meta =
+            getOrCreateSegmentMetadata(module_meta, segment_name);
+        segment_meta->setAttr("dma_allocations",
+                              ArrayAttr::get(ctx, dma_allocations));
       }
 
       // ObjectFifo metadata linkage
