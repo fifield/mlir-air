@@ -179,10 +179,7 @@ struct air_module_desc_t {
 typedef size_t air_module_handle_t;
 
 // return 0 on failure, nonzero otherwise
-air_module_handle_t air_module_load_from_file(const char *filename,
-                                              hsa_agent_t *agent = 0,
-                                              hsa_queue_t *q = 0,
-                                              uint32_t device_id = 0);
+air_module_handle_t air_module_load_from_file(const char *filename);
 
 // return 0 on success, nonzero otherwise
 int32_t air_module_unload(air_module_handle_t handle);

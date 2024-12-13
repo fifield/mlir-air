@@ -25,17 +25,20 @@
 extern "C" {
 
 extern air_rt_herd_desc_t _air_host_active_herd;
+extern air_rt_segment_desc_t _air_host_active_segment;
 extern aie_libxaie_ctx_t *_air_host_active_libxaie;
 extern uint32_t *_air_host_bram_ptr;
 extern uint64_t _air_host_bram_paddr;
 }
 
+using air::rocm::Runtime;
+
 void *air_malloc(size_t size) {
-  void *mem(air::rocm::Runtime::runtime_->AllocateMemory(size));
+  void *mem(Runtime::getRuntime()->AllocateMemory(size));
   return mem;
 }
 
-void air_free(void *mem) { air::rocm::Runtime::runtime_->FreeMemory(mem); }
+void air_free(void *mem) { Runtime::getRuntime()->FreeMemory(mem); }
 
 // Data structure internal to the runtime to map air tensors
 // to the information to access a remote buffer
@@ -58,25 +61,50 @@ static void air_mem_shim_nd_memcpy_queue_impl(
     uint64_t offset_0, uint64_t length_4d, uint64_t length_3d,
     uint64_t length_2d, uint64_t length_1d, uint64_t stride_4d,
     uint64_t stride_3d, uint64_t stride_2d) {
-  assert(_air_host_active_herd.herd_desc &&
-         "cannot shim memcpy without active herd");
-  assert(_air_host_active_herd.q &&
-         "cannot shim memcpy using a queue without active queue");
-  assert(_air_host_active_herd.agent &&
-         "cannot shim memcpy using an agent without an active agent");
+  // assert(_air_host_active_herd.herd_desc &&
+  //        "cannot shim memcpy without active herd");
+  // assert(_air_host_active_herd.q &&
+  //        "cannot shim memcpy using a queue without active queue");
+  // assert(_air_host_active_herd.agent &&
+  //        "cannot shim memcpy using an agent without an active agent");
+  auto shim_descs = _air_host_active_segment.segment_desc->shim_descs;
+  uint32_t shim_col = 0xffff;
+  uint32_t shim_chan = 0xffff;
+  for (int i = 0; i < _air_host_active_segment.segment_desc->shim_desc_length;
+       i++) {
+    if (shim_descs[i].id == id) {
+      shim_col = shim_descs[i].location;
+      shim_chan = shim_descs[i].channel;
+      break;
+    }
+  }
+  printf(
+      "Do transfer %p with id %d on behalf of x=%ld, y=%ld space %d, col \
+  %d, dir %d, chan %d, offset [%ld,%ld,%ld,%ld], length [%ld,%ld,%ld,%ld], \
+  stride [%ld,%ld,%ld]\n",
+      t->data, id, x, y, space, shim_col, shim_chan >= 2,
+      (shim_chan >= 2) ? shim_chan - 2 : shim_chan, offset_3, offset_2,
+      offset_1, offset_0, length_4d, length_3d, length_2d, length_1d,
+      stride_4d, stride_3d, stride_2d);
+  return;
+  // printf("id %d, x %ld, y %ld, space %d, offset [%ld,%ld,%ld,%ld], length \
+  // [%ld,%ld,%ld,%ld], stride [%ld,%ld,%ld]\n",
+  //        id, x, y, space, offset_3, offset_2, offset_1, offset_0, length_4d,
+  //        length_3d, length_2d, length_1d, stride_4d, stride_3d, stride_2d);
+  // auto shim_desc = _air_host_active_segment.segment_desc->shim_desc;
+  // auto shim_col = shim_location_data(shim_desc, id - 1, x, y);
+  // auto shim_chan = shim_channel_data(shim_desc, id - 1, x, y);
 
-  auto shim_desc = _air_host_active_herd.herd_desc->shim_desc;
-  auto shim_col = shim_location_data(shim_desc, id - 1, x, y);
-  auto shim_chan = shim_channel_data(shim_desc, id - 1, x, y);
-
-  // printf("Do transfer %p with id %d on behalf of x=%ld, y=%ld space %d, col
-  // %d, dir %d, chan %d, offset [%ld,%ld,%ld,%ld], length [%ld,%ld,%ld,%ld],
+  // printf("Do transfer %p with id %d on behalf of x=%ld, y=%ld space %d, col \
+  // %d, dir %d, chan %d, offset [%ld,%ld,%ld,%ld], length [%ld,%ld,%ld,%ld], \
   // stride [%ld,%ld,%ld]\n",
   //       t->data, id, x, y, space, shim_col, shim_chan>=2, (shim_chan>=2) ?
   //       shim_chan-2 : shim_chan, offset_3, offset_2, offset_1, offset_0,
   //       length_4d, length_3d, length_2d, length_1d,
   //       stride_4d, stride_3d, stride_2d);
 
+  return;
+#if 0
   // Checking our internal representation to determine if the buffer is
   // remote or local. If we don't find anything in our map, we say it
   // is local
@@ -273,6 +301,7 @@ static void air_mem_shim_nd_memcpy_queue_impl(
       }
     }
   }
+#endif
 }
 
 #define mlir_air_dma_nd_memcpy(mangle, rank, space, type)                      \

@@ -60,9 +60,9 @@ void defineAIRHostModule(nb::module_ &m) {
   // AIR host functions
   m.def("allocate_memory", [](size_t size) -> nb::ndarray<nb::numpy, uint8_t> {
     void *mem = air_malloc(size);
-    std::cout << "Allocated memory at " << mem << std::endl;
+    std::cout << "Allocated memory at " << mem << "\n";
     nb::capsule capsule(mem, [](void *mem) noexcept {
-      std::cout << "Deallocating memory at " << mem << std::endl;
+      std::cout << "Deallocating memory at " << mem << "\n";
       air_free(mem);
     });
     return nb::ndarray<nb::numpy, uint8_t>(mem, {size}, capsule);
@@ -71,16 +71,28 @@ void defineAIRHostModule(nb::module_ &m) {
   m.def("run",
         [](const std::string &pdi_file, const std::string &insts_file,
            std::vector<nb::ndarray<uint8_t>> &args) -> uint64_t {
-          std::cout << "Running " << insts_file << " with " << pdi_file
-                    << std::endl;
+          std::cout << "Running " << insts_file << " with " << pdi_file << "\n"; 
           for (auto &arg : args) {
-            std::cout << "arg size: " << arg.size() << std::endl;
+            std::cout << "arg size: " << arg.size() << "\n";
           }
           std::vector<void *> arg_ptrs;
           for (auto &arg : args) {
             arg_ptrs.push_back(arg.data());
           }
           return run_kernel(pdi_file, insts_file, arg_ptrs);
+        });
+  m.def("dispatch",
+        [](const std::string &insts_file,
+           std::vector<pybind11::array_t<uint8_t>> &args) -> uint64_t {
+          std::cout << "Running " << insts_file << "\n";
+          for (auto &arg : args) {
+            std::cout << "arg size: " << arg.size() << "\n";
+          }
+          std::vector<void *> arg_ptrs;
+          for (auto &arg : args) {
+            arg_ptrs.push_back(arg.request().ptr);
+          }
+          return dispatch_sequence(insts_file, arg_ptrs);
         });
 
   m.def(
@@ -126,9 +138,8 @@ void defineAIRHostModule(nb::module_ &m) {
       });
 
   m.def("module_load_from_file",
-        [](const std::string &filename, hsa_agent_t *agent,
-           hsa_queue_t *q) -> air_module_handle_t {
-          return air_module_load_from_file(filename.c_str(), agent, q);
+        [](const std::string &filename) -> air_module_handle_t {
+          return air_module_load_from_file(filename.c_str());
         });
 
   m.def("module_unload", &air_module_unload);
