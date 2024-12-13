@@ -6,13 +6,19 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include <iostream>
+#include "air.hpp"
+
+#include "hsa/hsa.h"
+#include <hsa/hsa_ext_amd.h>
+
+#include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/pytypes.h>
 #include <pybind11/stl.h>
 
-#include "air.hpp"
-#include "hsa/hsa.h"
+#include <iostream>
+#include <sstream>
+#include <string>
 
 #define STRINGIFY(x) #x
 #define MACRO_STRINGIFY(x) STRINGIFY(x)
@@ -21,6 +27,73 @@ namespace py = pybind11;
 
 namespace {
 void defineAIRHostModule(pybind11::module &m) {
+
+  // HSA helper classes
+
+  // hsa_agent_t
+  pybind11::class_<hsa_agent_t> Agent(m, "Agent");
+  Agent.def("__str__", [](const hsa_agent_t &self) -> std::string {
+    std::stringstream ss;
+    ss << "<hsa_agent_t at 0x" << std::hex << reinterpret_cast<uint64_t>(&self)
+       << ">";
+    return ss.str();
+  });
+  Agent.def("type", [](const hsa_agent_t &self) -> hsa_device_type_t {
+    hsa_device_type_t type;
+    hsa_agent_get_info(self, HSA_AGENT_INFO_DEVICE, &type);
+    return type;
+  });
+
+  // hsa_amd_memory_pool_t
+  pybind11::class_<hsa_amd_memory_pool_t> MemoryPool(m, "AmdMemoryPool");
+
+  // hsa_device_type_t
+  pybind11::enum_<hsa_device_type_t> HsaDeviceType(m, "DeviceType");
+  HsaDeviceType.value("HSA_DEVICE_TYPE_CPU", HSA_DEVICE_TYPE_CPU)
+      .value("HSA_DEVICE_TYPE_GPU", HSA_DEVICE_TYPE_GPU)
+      .value("HSA_DEVICE_TYPE_DSP", HSA_DEVICE_TYPE_DSP)
+      .value("HSA_DEVICE_TYPE_AIE", HSA_DEVICE_TYPE_AIE);
+
+  pybind11::class_<hsa_queue_t> Queue(m, "Queue");
+
+  // AIR host functions
+  m.def("allocate_memory", [](size_t size) -> pybind11::array_t<uint8_t> {
+    void *mem = air_malloc(size);
+    std::cout << "Allocated memory at " << mem << "\n";
+    pybind11::capsule capsule(mem, [](void *mem) {
+      std::cout << "Deallocating memory at " << mem << "\n";
+      air_free(mem);
+    });
+    return pybind11::array_t<uint8_t>(
+        {size}, {sizeof(uint8_t)}, reinterpret_cast<uint8_t *>(mem), capsule);
+  });
+
+  m.def("run",
+        [](const std::string &pdi_file, const std::string &insts_file,
+           std::vector<pybind11::array_t<uint8_t>> &args) -> uint64_t {
+          std::cout << "Running " << insts_file << " with " << pdi_file << "\n";
+          for (auto &arg : args) {
+            std::cout << "arg size: " << arg.size() << "\n";
+          }
+          std::vector<void *> arg_ptrs;
+          for (auto &arg : args) {
+            arg_ptrs.push_back(arg.request().ptr);
+          }
+          return run_kernel(pdi_file, insts_file, arg_ptrs);
+        });
+  m.def("dispatch",
+        [](const std::string &insts_file,
+           std::vector<pybind11::array_t<uint8_t>> &args) -> uint64_t {
+          std::cout << "Running " << insts_file << "\n";
+          for (auto &arg : args) {
+            std::cout << "arg size: " << arg.size() << "\n";
+          }
+          std::vector<void *> arg_ptrs;
+          for (auto &arg : args) {
+            arg_ptrs.push_back(arg.request().ptr);
+          }
+          return dispatch_sequence(insts_file, arg_ptrs);
+        });
 
   m.def(
       "init_libxaie", []() -> uint64_t { return (uint64_t)air_init_libxaie(); },
@@ -65,9 +138,8 @@ void defineAIRHostModule(pybind11::module &m) {
       });
 
   m.def("module_load_from_file",
-        [](const std::string &filename, hsa_agent_t *agent,
-           hsa_queue_t *q) -> air_module_handle_t {
-          return air_module_load_from_file(filename.c_str(), agent, q);
+        [](const std::string &filename) -> air_module_handle_t {
+          return air_module_load_from_file(filename.c_str());
         });
 
   m.def("module_unload", &air_module_unload);
@@ -75,18 +147,19 @@ void defineAIRHostModule(pybind11::module &m) {
   m.def("get_module_descriptor", &air_module_get_desc,
         pybind11::return_value_policy::reference);
 
-  pybind11::class_<hsa_agent_t> Agent(m, "Agent");
-
   m.def(
       "get_agents",
       []() -> std::vector<hsa_agent_t> {
         std::vector<hsa_agent_t> agents;
-        air_get_agents(agents);
+        hsa_iterate_agents(
+            [](hsa_agent_t agent, void *data) {
+              static_cast<std::vector<hsa_agent_t> *>(data)->push_back(agent);
+              return HSA_STATUS_SUCCESS;
+            },
+            (void *)&agents);
         return agents;
       },
       pybind11::return_value_policy::reference);
-
-  pybind11::class_<hsa_queue_t> Queue(m, "Queue");
 
   m.def(
       "queue_create",
