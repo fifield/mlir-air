@@ -267,9 +267,6 @@ def lower_airrt_to_airhost(air_to_aie_module, air_placed_module, air_mlir_filena
     aie_ctrl_llvm_opt_bc = opts.tmpdir + "/" + air_mlir_filename + ".opt.bc"
     do_call(["opt", "-O3", aie_ctrl_llvm_ir, "-o", aie_ctrl_llvm_opt_bc])
 
-    aie_ctrl_llvm_opt_ir = opts.tmpdir + "/" + air_mlir_filename + ".opt.ll"
-    do_call(["llvm-dis", aie_ctrl_llvm_opt_bc, "-o", aie_ctrl_llvm_opt_ir])
-
     aie_ctrl_obj = opts.tmpdir + "/" + air_mlir_filename + ".o"
     llc_target = None
     if "x86_64" in opts.host_target:
@@ -281,7 +278,7 @@ def lower_airrt_to_airhost(air_to_aie_module, air_placed_module, air_mlir_filena
     do_call(
         ["llc", "-O3", "--filetype=obj", "--relocation-model=pic"]
         + (["-march=" + llc_target] if llc_target else [])
-        + [aie_ctrl_llvm_opt_ir, "-o", aie_ctrl_obj]
+        + [aie_ctrl_llvm_opt_bc, "-o", aie_ctrl_obj]
     )
 
     # make aie elf files and host .o files for each herd in the program
@@ -357,7 +354,7 @@ def lower_airrt_to_airhost(air_to_aie_module, air_placed_module, air_mlir_filena
 
         # air runtime include path
         thispath = os.path.dirname(os.path.realpath(__file__))
-        cmd += [f"-I{thispath}/../../../../runtime_lib/airhost/include"]
+        cmd += [f"-I{thispath}/../../../../runtime_lib/x86_64/airhost/include"]
 
         # aie runtime include path
         if "x86_64" in aiecc_target:
@@ -407,6 +404,7 @@ def run(mlir_module, args=None):
         if opts.verbose:
             print("created temporary directory", tmpdirname)
 
+    # TODO get the actual number of cols from the aie.device target model
     if not opts.num_cols:
         opts.num_cols = 4 if "npu" in opts.device else 10
 
@@ -502,6 +500,10 @@ def run(mlir_module, args=None):
             air_to_aie_file,
         )
 
+        lower_airrt_to_airhost(
+            Module.parse(str(air_to_aie_module)), air_placed_module, air_mlir_filename
+        )
+
         if "npu" in opts.device:
             air_opt_shim_dma_bds_pass = "func.func(air-opt-shim-dma-bds{device="
             air_opt_shim_dma_bds_pass = air_opt_shim_dma_bds_pass + opts.device
@@ -547,11 +549,15 @@ def run(mlir_module, args=None):
             else:
                 assert xclbin_file.endswith(".xclbin")
                 insts_file = opts.output_file.removesuffix(".xclbin") + ".insts.bin"
+            if opts.xclbin_file:
+                xclbin_file = opts.xclbin_file
             aiecc_options = (["-v"] if opts.verbose else []) + [
                 "--no-aiesim",
                 "--xchesscc" if opts.xchesscc else "--no-xchesscc",
                 "--xbridge" if opts.xbridge else "--no-xbridge",
                 "--aie-generate-xclbin",
+                "--aie-generate-cdo",
+                "--aie-generate-txn",
                 "--aie-generate-npu",
                 "--no-compile-host",
                 "--xclbin-name=" + xclbin_file,
@@ -559,10 +565,7 @@ def run(mlir_module, args=None):
                 air_to_npu_file,
             ]
             aiecc.run(air_to_npu_module, aiecc_options)
-        else:
-            lower_airrt_to_airhost(
-                air_to_aie_module, air_placed_module, air_mlir_filename
-            )
+
 
 
 def main():
