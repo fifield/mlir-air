@@ -133,6 +133,14 @@ struct air_herd_shim_desc_t {
   int64_t *channel_data;
 };
 
+struct air_segment_shim_desc_t {
+  int32_t id;
+  int32_t row;
+  int32_t col;
+  int32_t location;
+  int32_t channel;
+};
+
 struct air_herd_desc_t {
   int64_t name_length;
   char *name;
@@ -150,6 +158,8 @@ struct air_segment_desc_t {
   char *name;
   uint64_t herd_length;
   air_herd_desc_t **herd_descs;
+  uint64_t shim_desc_length;
+  air_segment_shim_desc_t *shim_descs;
 };
 
 struct air_rt_segment_desc_t {
@@ -169,10 +179,7 @@ struct air_module_desc_t {
 typedef size_t air_module_handle_t;
 
 // return 0 on failure, nonzero otherwise
-air_module_handle_t air_module_load_from_file(const char *filename,
-                                              hsa_agent_t *agent = 0,
-                                              hsa_queue_t *q = 0,
-                                              uint32_t device_id = 0);
+air_module_handle_t air_module_load_from_file(const char *filename);
 
 // return 0 on success, nonzero otherwise
 int32_t air_module_unload(air_module_handle_t handle);
