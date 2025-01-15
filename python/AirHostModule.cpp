@@ -83,14 +83,14 @@ void defineAIRHostModule(nb::module_ &m) {
         });
   m.def("dispatch",
         [](const std::string &insts_file,
-           std::vector<pybind11::array_t<uint8_t>> &args) -> uint64_t {
+           std::vector<nb::ndarray<uint8_t>> &args) -> uint64_t {
           std::cout << "Running " << insts_file << "\n";
           for (auto &arg : args) {
             std::cout << "arg size: " << arg.size() << "\n";
           }
           std::vector<void *> arg_ptrs;
           for (auto &arg : args) {
-            arg_ptrs.push_back(arg.request().ptr);
+            arg_ptrs.push_back(arg.data());
           }
           return dispatch_sequence(insts_file, arg_ptrs);
         });
