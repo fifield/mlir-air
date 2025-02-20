@@ -17,6 +17,8 @@ struct air_rt_aie_functions_t {
   int (*initialize_locks)(aie_libxaie_ctx_t *);
   int (*configure_dmas)(aie_libxaie_ctx_t *);
   int (*start_cores)(aie_libxaie_ctx_t *);
+  size_t (*get_pdi)(void **);
+  size_t (*get_insts)(void **);
 };
 
 /*
