@@ -134,6 +134,29 @@ hsa_status_t run_kernel(const std::string &pdi_file,
                                                      args);
 }
 
+hsa_status_t dispatch_segment(std::vector<void *> &args) {
+  auto segment_desc = _air_host_active_segment.segment_desc;
+  if (!segment_desc)
+    return HSA_STATUS_ERROR;
+
+  std::string segment_name(segment_desc->name, segment_desc->name_length);
+
+  std::string func_name = "__airrt_" + segment_name + "_aie_functions";
+  air_rt_aie_functions_t *mlir = (air_rt_aie_functions_t *)dlsym(
+      (void *)_air_host_active_module, func_name.c_str());
+
+  uint32_t *insts_buf = nullptr;
+  size_t insts_size = mlir->get_insts(reinterpret_cast<void **>(&insts_buf));
+  if (!insts_size || !insts_buf) {
+    printf("Failed to get instructions\n");
+    return HSA_STATUS_ERROR;
+  }
+  std::vector<uint32_t> sequence_vector(
+      insts_buf, insts_buf + (insts_size / sizeof(uint32_t)));
+  return air::rocm::Runtime::getRuntime()->dispatchRutimeSequence(
+      sequence_vector, args);
+}
+
 hsa_status_t dispatch_sequence(const std::string &insts_file,
                                std::vector<void *> &args) {
 
@@ -187,7 +210,7 @@ air_libxaie_ctx_t air_init_libxaie(uint32_t device_id) {
 
   XAie_BackendType backend;
   // xaie->AieConfigPtr.Backend = XAIE_IO_BACKEND_AMDAIR;
- // backend = XAIE_IO_BACKEND_AMDAIR;
+  // backend = XAIE_IO_BACKEND_AMDAIR;
   xaie->AieConfigPtr.BaseAddr = 0;
   xaie->DevInst.IOInst = (void *)sysfs_path;
 
@@ -316,15 +339,13 @@ air_module_desc_t *air_module_get_desc(air_module_handle_t handle) {
                                     "__airrt_module_descriptor");
 }
 
-static uint64_t npu_segment_load(const char *name) {
+uint64_t air_segment_load(const char *name) {
 
   auto segment_desc = air_segment_get_desc(_air_host_active_module, name);
   if (!segment_desc) {
     printf("Failed to locate segment descriptor '%s'!\n", name);
     assert(0);
-    return 0;
   }
-
   std::string segment_name(segment_desc->name, segment_desc->name_length);
 
   if (VERBOSE)
@@ -334,98 +355,26 @@ static uint64_t npu_segment_load(const char *name) {
   air_rt_aie_functions_t *mlir = (air_rt_aie_functions_t *)dlsym(
       (void *)_air_host_active_module, func_name.c_str());
 
-  if (!mlir) {
-    printf("Failed to locate segment '%s' configuration functions!\n",
-           segment_name.c_str());
-    assert(0);
+  void *pdi_buf = nullptr;
+  size_t pdi_size = mlir->get_pdi(&pdi_buf);
+  if (!pdi_size || !pdi_buf) {
+    printf("Failed to get PDI\n");
     return 0;
   }
-  std::string pdi_file = "/work/acdc/tmp/npu.air.mlir.prj/design.pdi";
-  hsa_status_t r = air::rocm::Runtime::getRuntime()->loadSegmentPdi(pdi_file);
+
+  hsa_status_t r =
+      air::rocm::Runtime::getRuntime()->loadSegmentPdi(pdi_buf, pdi_size);
   if (r != HSA_STATUS_SUCCESS) {
-    printf("Failed to load segment PDI file '%s'!\n", pdi_file.c_str());
+    printf("Failed to load segment PDI!\n");
     assert(0);
     return 0;
   }
 
   if (VERBOSE)
-    std::cout << "loaded segment from pdi: '" << pdi_file << "'\n";
+    std::cout << "loaded segment from pdi\n";
 
   _air_host_active_segment.segment_desc = segment_desc;
   return reinterpret_cast<uint64_t>(segment_desc);
-}
-
-uint64_t air_segment_load(const char *name) {
-
-#ifdef ROCR_XDNA
-  return npu_segment_load(name);
-#endif
-
-  assert(_air_host_active_libxaie);
-
-  auto segment_desc = air_segment_get_desc(_air_host_active_module, name);
-  if (!segment_desc) {
-    printf("Failed to locate segment descriptor '%s'!\n", name);
-    assert(0);
-  }
-
-  XAie_Finish(&(_air_host_active_libxaie->DevInst));
-
-  // Setting the driver libxaie backend back up
-  // Currently only targetting device 0
-  //_air_host_active_libxaie->AieConfigPtr.Backend = XAIE_IO_BACKEND_AMDAIR;
-  _air_host_active_libxaie->DevInst.IOInst =
-      (void *)"/sys/class/amdair/amdair/00";
-
-  XAie_CfgInitialize(&(_air_host_active_libxaie->DevInst),
-                     &(_air_host_active_libxaie->AieConfigPtr));
-  XAie_PmRequestTiles(&(_air_host_active_libxaie->DevInst), NULL, 0);
-
-  //
-  // Set up a 1x3 herd starting 7,0
-  //
-  uint64_t wr_idx =
-      hsa_queue_add_write_index_relaxed(_air_host_active_segment.q, 1);
-  uint64_t packet_id = wr_idx % _air_host_active_segment.q->size;
-  hsa_agent_dispatch_packet_t shim_pkt;
-  air_packet_device_init(&shim_pkt, XAIE_NUM_COLS);
-  air_queue_dispatch_and_wait(_air_host_active_segment.agent,
-                              _air_host_active_segment.q, packet_id, wr_idx,
-                              &shim_pkt);
-
-  wr_idx = hsa_queue_add_write_index_relaxed(_air_host_active_segment.q, 1);
-  packet_id = wr_idx % _air_host_active_segment.q->size;
-  hsa_agent_dispatch_packet_t segment_pkt;
-  air_packet_segment_init(&segment_pkt, 0, 0, 50, 1, 8);
-  air_queue_dispatch_and_wait(_air_host_active_segment.agent,
-                              _air_host_active_segment.q, packet_id, wr_idx,
-                              &segment_pkt);
-
-  std::string segment_name(segment_desc->name, segment_desc->name_length);
-
-  std::string func_name = "__airrt_" + segment_name + "_aie_functions";
-  air_rt_aie_functions_t *mlir = (air_rt_aie_functions_t *)dlsym(
-      (void *)_air_host_active_module, func_name.c_str());
-
-  if (mlir) {
-    // printf("configuring segment: '%s'\n", segment_name.c_str());
-    assert(mlir->configure_cores);
-    assert(mlir->configure_switchboxes);
-    assert(mlir->initialize_locks);
-    assert(mlir->configure_dmas);
-    assert(mlir->start_cores);
-    mlir->configure_cores(_air_host_active_libxaie);
-    mlir->configure_switchboxes(_air_host_active_libxaie);
-    mlir->initialize_locks(_air_host_active_libxaie);
-    mlir->configure_dmas(_air_host_active_libxaie);
-    mlir->start_cores(_air_host_active_libxaie);
-  } else {
-    printf("Failed to locate segment '%s' configuration functions!\n",
-           segment_name.c_str());
-    assert(0);
-  }
-  _air_host_active_segment.segment_desc = segment_desc;
-  return 0;
 }
 
 uint64_t air_herd_load(const char *name) {

@@ -24,14 +24,14 @@ def parse_args(args=None):
     parser.add_argument(
         "-i",
         dest="insts_file",
-        default="insts.txt",
-        help="Output insts file name. Only used for compilation on an NPU.",
+        default="",
+        help="Output insts file name for NPU.",
     )
     parser.add_argument(
         "-x",
         dest="xclbin_file",
-        default="aie.xclbin",
-        help="Output xclbin file name.",
+        default="",
+        help="Output xclbin file name for NPU.",
     )
     parser.add_argument(
         "--tmpdir",

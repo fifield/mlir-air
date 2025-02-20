@@ -58,20 +58,19 @@ void defineAIRHostModule(nb::module_ &m) {
   nb::class_<hsa_queue_t> Queue(m, "Queue");
 
   // AIR host functions
-  m.def("allocate_memory", [](size_t size) -> nb::ndarray<nb::numpy, uint8_t> {
+  m.def("allocate_memory", [](size_t size) -> nb::ndarray<nb::numpy, int8_t> {
     void *mem = air_malloc(size);
     std::cout << "Allocated memory at " << mem << "\n";
     nb::capsule capsule(mem, [](void *mem) noexcept {
       std::cout << "Deallocating memory at " << mem << "\n";
       air_free(mem);
     });
-    return nb::ndarray<nb::numpy, uint8_t>(mem, {size}, capsule);
+    return nb::ndarray<nb::numpy, int8_t>(mem, {size}, capsule);
   });
 
   m.def("run",
         [](const std::string &pdi_file, const std::string &insts_file,
            std::vector<nb::ndarray<uint8_t>> &args) -> uint64_t {
-          std::cout << "Running " << insts_file << " with " << pdi_file << "\n"; 
           for (auto &arg : args) {
             std::cout << "arg size: " << arg.size() << "\n";
           }
@@ -81,19 +80,22 @@ void defineAIRHostModule(nb::module_ &m) {
           }
           return run_kernel(pdi_file, insts_file, arg_ptrs);
         });
-  m.def("dispatch",
+
+  m.def("dispatch_sequence",
         [](const std::string &insts_file,
-           std::vector<nb::ndarray<uint8_t>> &args) -> uint64_t {
-          std::cout << "Running " << insts_file << "\n";
-          for (auto &arg : args) {
-            std::cout << "arg size: " << arg.size() << "\n";
-          }
+           std::vector<nb::ndarray<>> &args) -> uint64_t {
           std::vector<void *> arg_ptrs;
-          for (auto &arg : args) {
+          for (auto &arg : args)
             arg_ptrs.push_back(arg.data());
-          }
           return dispatch_sequence(insts_file, arg_ptrs);
         });
+
+  m.def("dispatch_segment", [](std::vector<nb::ndarray<>> &args) -> uint64_t {
+    std::vector<void *> arg_ptrs;
+    for (auto &arg : args)
+      arg_ptrs.push_back(arg.data());
+    return dispatch_segment(arg_ptrs);
+  });
 
   m.def(
       "init_libxaie", []() -> uint64_t { return (uint64_t)air_init_libxaie(); },

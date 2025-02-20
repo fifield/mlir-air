@@ -30,10 +30,14 @@ public:
   void *AllocateMemory(size_t size);
   hsa_status_t FreeMemory(void *ptr);
 
+  hsa_status_t RunKernel(const void *pdi_buf, size_t pdi_size,
+                         const std::string &insts_file,
+                         std::vector<void *> &args);
   hsa_status_t RunKernel(const std::string &pdi_file,
                          const std::string &insts_file,
                          std::vector<void *> &args);
-  hsa_status_t loadSegmentPdi(const std::string &pdi_file);
+  hsa_status_t loadSegmentPdi(const void *pdi_buf, size_t pdi_size,
+                              bool do_alloc = true);
   hsa_status_t dispatchRutimeSequence(std::vector<uint32_t> &sequence_vector,
                                       std::vector<void *> &args);
 
