@@ -26,9 +26,6 @@ extern "C" {
 
 extern air_rt_herd_desc_t _air_host_active_herd;
 extern air_rt_segment_desc_t _air_host_active_segment;
-extern aie_libxaie_ctx_t *_air_host_active_libxaie;
-extern uint32_t *_air_host_bram_ptr;
-extern uint64_t _air_host_bram_paddr;
 }
 
 using air::rocm::Runtime;

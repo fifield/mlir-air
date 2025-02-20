@@ -97,14 +97,6 @@ void defineAIRHostModule(nb::module_ &m) {
     return dispatch_segment(arg_ptrs);
   });
 
-  m.def(
-      "init_libxaie", []() -> uint64_t { return (uint64_t)air_init_libxaie(); },
-      nb::rv_policy::reference);
-
-  m.def("deinit_libxaie", [](uint64_t ctx) -> void {
-    air_deinit_libxaie((air_libxaie_ctx_t)ctx);
-  });
-
   m.def("init", []() -> uint64_t { return (uint64_t)air_init(); });
 
   m.def("shut_down", []() -> uint64_t { return (uint64_t)air_shut_down(); });

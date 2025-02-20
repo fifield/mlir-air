@@ -30,19 +30,6 @@
 #include <unistd.h>
 #include <vector>
 
-#define XAIE_BASE_ADDR 0x20000000000
-#define XAIE_NUM_ROWS 9
-#define XAIE_NUM_COLS 50
-#define XAIE_COL_SHIFT 23
-#define XAIE_ROW_SHIFT 18
-#define XAIE_SHIM_ROW 0
-#define XAIE_RES_TILE_ROW_START 0
-#define XAIE_RES_TILE_NUM_ROWS 0
-#define XAIE_AIE_TILE_ROW_START 1
-#define XAIE_AIE_TILE_NUM_ROWS 8
-
-#define SYSFS_PATH_MAX 63
-
 #define BOUNCE_BUFFER_SIZE 0x8000
 
 #define ROCR_XDNA 1
@@ -54,12 +41,7 @@ extern "C" {
 
 air_rt_herd_desc_t _air_host_active_herd = {nullptr, nullptr, nullptr};
 air_rt_segment_desc_t _air_host_active_segment = {nullptr, nullptr, nullptr};
-aie_libxaie_ctx_t *_air_host_active_libxaie = nullptr;
-uint32_t *_air_host_bram_ptr = nullptr;
-uint64_t _air_host_bram_paddr = 0;
 air_module_handle_t _air_host_active_module = (air_module_handle_t) nullptr;
-
-const char vck5000_driver_name[] = "/dev/amdair";
 }
 
 // Determining if an hsa agent is an AIE agent or not
@@ -99,24 +81,13 @@ hsa_status_t air_init() {
     return hsa_ret;
   }
 
-  // if (_air_host_active_libxaie == nullptr)
-  //   air_init_libxaie();
-
-  // if (_air_host_active_libxaie == nullptr)
-  //   return HSA_STATUS_ERROR_OUT_OF_RESOURCES;
-
   return HSA_STATUS_SUCCESS;
 }
 
 hsa_status_t air_shut_down() {
-  if (!_air_host_active_libxaie)
-    return HSA_STATUS_ERROR_NOT_INITIALIZED;
 
   if (_air_host_active_module)
     air_module_unload(_air_host_active_module);
-
-  if (_air_host_active_libxaie)
-    air_deinit_libxaie((air_libxaie_ctx_t)_air_host_active_libxaie);
 
   hsa_status_t hsa_ret = hsa_shut_down();
   if (hsa_ret != HSA_STATUS_SUCCESS) {
@@ -177,67 +148,6 @@ hsa_status_t dispatch_sequence(const std::string &insts_file,
       sequence_vector, args);
 }
 
-air_libxaie_ctx_t air_get_libxaie_ctx() {
-  return (air_libxaie_ctx_t)_air_host_active_libxaie;
-}
-
-air_libxaie_ctx_t air_init_libxaie(uint32_t device_id) {
-  if (_air_host_active_libxaie)
-    return (air_libxaie_ctx_t)_air_host_active_libxaie;
-
-  aie_libxaie_ctx_t *xaie =
-      (aie_libxaie_ctx_t *)malloc(sizeof(aie_libxaie_ctx_t));
-  if (!xaie)
-    return (air_libxaie_ctx_t) nullptr;
-
-  xaie->AieConfigPtr.AieGen = XAIE_DEV_GEN_AIE;
-  xaie->AieConfigPtr.ColShift = XAIE_COL_SHIFT;
-  xaie->AieConfigPtr.RowShift = XAIE_ROW_SHIFT;
-  xaie->AieConfigPtr.NumRows = XAIE_NUM_ROWS;
-  xaie->AieConfigPtr.NumCols = XAIE_NUM_COLS;
-  xaie->AieConfigPtr.ShimRowNum = XAIE_SHIM_ROW;
-  xaie->AieConfigPtr.MemTileRowStart = XAIE_RES_TILE_ROW_START;
-  xaie->AieConfigPtr.MemTileNumRows = XAIE_RES_TILE_NUM_ROWS;
-  xaie->AieConfigPtr.AieTileRowStart = XAIE_AIE_TILE_ROW_START;
-  xaie->AieConfigPtr.AieTileNumRows = XAIE_AIE_TILE_NUM_ROWS;
-  xaie->AieConfigPtr.PartProp = {0};
-  xaie->DevInst = {0};
-
-  char sysfs_path[SYSFS_PATH_MAX + 1];
-  if (snprintf(sysfs_path, SYSFS_PATH_MAX, "/sys/class/amdair/amdair/%02u",
-               device_id) == SYSFS_PATH_MAX)
-    sysfs_path[SYSFS_PATH_MAX] = 0;
-
-  XAie_BackendType backend;
-  // xaie->AieConfigPtr.Backend = XAIE_IO_BACKEND_AMDAIR;
-  // backend = XAIE_IO_BACKEND_AMDAIR;
-  xaie->AieConfigPtr.BaseAddr = 0;
-  xaie->DevInst.IOInst = (void *)sysfs_path;
-
-  if (XAie_CfgInitialize(&(xaie->DevInst), &(xaie->AieConfigPtr)) != XAIE_OK) {
-    printf("[ERROR] Failed to configure libxaie\n");
-    return (air_libxaie_ctx_t) nullptr;
-  }
-
-  XAie_PmRequestTiles(&(xaie->DevInst), NULL, 0);
-
-  _air_host_active_libxaie = xaie;
-  return (air_libxaie_ctx_t)xaie;
-}
-
-void air_deinit_libxaie(air_libxaie_ctx_t _xaie) {
-  aie_libxaie_ctx_t *xaie = (aie_libxaie_ctx_t *)_xaie;
-  if (xaie == _air_host_active_libxaie) {
-    XAie_Finish(&(xaie->DevInst));
-
-    if (xaie->AieConfigPtr.BaseAddr)
-      munmap((void *)xaie->AieConfigPtr.BaseAddr, 0x20000000);
-
-    _air_host_active_libxaie = nullptr;
-  }
-  free(xaie);
-}
-
 air_module_handle_t air_module_load_from_file(const char *filename) {
   if (_air_host_active_module)
     air_module_unload(_air_host_active_module);
@@ -254,11 +164,6 @@ air_module_handle_t air_module_load_from_file(const char *filename) {
   _air_host_active_module = (air_module_handle_t)_handle;
   _air_host_active_herd = {q, agent, nullptr};
   _air_host_active_segment = {q, agent, nullptr};
-
-  _air_host_bram_ptr = (uint32_t *)air_malloc(BOUNCE_BUFFER_SIZE);
-
-  assert((_air_host_bram_ptr != MAP_FAILED) &&
-         "Failed to map scratch bram location");
 
   return (air_module_handle_t)_handle;
 }
@@ -283,9 +188,6 @@ int32_t air_module_unload(air_module_handle_t handle) {
   }
   if (_air_host_active_module == handle) {
     _air_host_active_module = (air_module_handle_t) nullptr;
-
-    air_free(_air_host_bram_ptr);
-    _air_host_bram_paddr = 0;
   }
 
   return dlclose((void *)handle);
@@ -482,30 +384,6 @@ uint64_t air_wait_all(std::vector<uint64_t> &signals) {
   }
 
   return 0;
-}
-
-// uint64_t air_get_tile_addr(uint32_t col, uint32_t row) {
-//   if (_air_host_active_libxaie == NULL)
-//     return -1;
-//   return _XAie_GetTileAddr(&(_air_host_active_libxaie->DevInst), row, col);
-// }
-
-/// Read the AIE registers at the given physical address.
-uint32_t air_read32(uint64_t addr) {
-  if (_air_host_active_libxaie == NULL)
-    return -1;
-  uint32_t val;
-  XAie_Read32(&(_air_host_active_libxaie->DevInst), addr, &val);
-  return val;
-}
-
-/// Write the AIE registers at the given physical address.
-/// It's almost always better to use some more indirect method of accessing
-/// configuration registers, but this is provided as a last resort.
-void air_write32(uint64_t addr, uint32_t val) {
-  if (_air_host_active_libxaie == NULL)
-    return;
-  XAie_Write32(&(_air_host_active_libxaie->DevInst), addr, val);
 }
 
 extern "C" {
