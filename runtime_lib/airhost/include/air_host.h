@@ -30,15 +30,6 @@ hsa_status_t air_shut_down();
 void *air_malloc(size_t size);
 void air_free(void *mem);
 
-// libxaie context operations
-//
-
-typedef uint64_t air_libxaie_ctx_t;
-
-air_libxaie_ctx_t air_init_libxaie(uint32_t device_id = 0);
-air_libxaie_ctx_t air_get_libxaie_ctx();
-void air_deinit_libxaie(air_libxaie_ctx_t);
-
 // debug operations
 //
 

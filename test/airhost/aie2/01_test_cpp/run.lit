@@ -7,7 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 // RUN: %PYTHON %S/gen.py
-// RUN: %CLANG %S/test.cpp -I%HSA_DIR%/include -L%HSA_DIR%/lib -ldl -lhsa-runtime64 -I%LIBXAIE_DIR%/include -L%LIBXAIE_DIR%/lib -lxaiengine %airhost_libs% -Wl,--whole-archive ./air.a -Wl,--no-whole-archive -rdynamic -o ./test.exe
+// RUN: %CLANG %S/test.cpp -I%HSA_DIR%/include -L%HSA_DIR%/lib -ldl -lhsa-runtime64 %airhost_libs% -Wl,--whole-archive ./air.a -Wl,--no-whole-archive -rdynamic -o ./test.exe
 // RUN: ./test.exe | FileCheck %s
 
 // CHECK: PASS!
