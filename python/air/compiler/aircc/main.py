@@ -125,12 +125,12 @@ def emit_wrapper(opts, herd_name="segment"):
     s = s + ",".join(f"0x{byte:02x}" for byte in pdi_data)
     s = s + "};\n"
     s = s + f"const size_t _pdi_data_size = {len(pdi_data)};\n"
-    with open(opts.insts_file, "r") as f:
-        insts_data = f.read().splitlines()
-    s = s + "const uint32_t _insts_data[] = {"
-    s = s + ",".join(f"0x{inst}" for inst in insts_data)
+    with open(opts.insts_file, "rb") as f:
+        insts_data = f.read()
+    s = s + "const unsigned char _insts_data[] = {"
+    s = s + ",".join(f"0x{byte:02x}" for byte in insts_data)
     s = s + "};\n"
-    s = s + f"const size_t _insts_data_size = {len(insts_data)*4};"
+    s = s + f"const size_t _insts_data_size = {len(insts_data)};"
     s = (
         s
         + """
@@ -530,11 +530,10 @@ def run(mlir_module, args=None):
                 "--xchesscc" if opts.xchesscc else "--no-xchesscc",
                 "--xbridge" if opts.xbridge else "--no-xbridge",
                 "--aie-generate-xclbin",
-                "--aie-generate-cdo",
+                "--aie-generate-pdi",
                 "--aie-generate-txn",
                 "--aie-generate-npu",
                 "--no-compile-host",
-                "--xclbin-name=" + xclbin_file,
                 "--npu-insts-name=" + opts.insts_file,
                 "--tmpdir=" + aiecc_dir,
                 air_to_npu_file,
