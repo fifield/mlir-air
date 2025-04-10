@@ -30,8 +30,10 @@ public:
   void *AllocateMemory(size_t size);
   hsa_status_t FreeMemory(void *ptr);
 
-  hsa_status_t loadSegmentPdi(void **pdi_buf, const void *pdi_data, size_t pdi_size);
-  hsa_status_t dispatchRutimeSequence(void *pdi_buf, std::vector<uint32_t> &sequence_vector,
+  hsa_status_t loadSegmentPdi(void **pdi_buf, const void *pdi_data,
+                              size_t pdi_size);
+  hsa_status_t dispatchRutimeSequence(void *pdi_buf,
+                                      std::vector<uint32_t> &sequence_vector,
                                       std::vector<void *> &args);
 
   hsa_queue_t *getAieQueue() { return aie_queue_; }
