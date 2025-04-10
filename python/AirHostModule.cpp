@@ -68,19 +68,6 @@ void defineAIRHostModule(nb::module_ &m) {
     return nb::ndarray<nb::numpy, int8_t>(mem, {size}, capsule);
   });
 
-  m.def("run",
-        [](const std::string &pdi_file, const std::string &insts_file,
-           std::vector<nb::ndarray<uint8_t>> &args) -> uint64_t {
-          for (auto &arg : args) {
-            std::cout << "arg size: " << arg.size() << "\n";
-          }
-          std::vector<void *> arg_ptrs;
-          for (auto &arg : args) {
-            arg_ptrs.push_back(arg.data());
-          }
-          return run_kernel(pdi_file, insts_file, arg_ptrs);
-        });
-
   m.def("dispatch_segment", [](std::vector<nb::ndarray<>> &args) -> uint64_t {
     std::vector<void *> arg_ptrs;
     for (auto &arg : args)
@@ -132,23 +119,20 @@ void defineAIRHostModule(nb::module_ &m) {
   m.def("get_module_descriptor", &air_module_get_desc,
         nb::rv_policy::reference);
 
-  // nb::class_<hsa_agent_t> Agent(m, "Agent");
-
   m.def(
       "get_agents",
       []() -> std::vector<hsa_agent_t> {
         std::vector<hsa_agent_t> agents;
         hsa_iterate_agents(
             [](hsa_agent_t agent, void *data) {
-              static_cast<std::vector<hsa_agent_t> *>(data)->push_back(agent);
+              reinterpret_cast<std::vector<hsa_agent_t> *>(data)->push_back(
+                  agent);
               return HSA_STATUS_SUCCESS;
             },
             (void *)&agents);
         return agents;
       },
       nb::rv_policy::reference);
-
-  // nb::class_<hsa_queue_t> Queue(m, "Queue");
 
   m.def(
       "queue_create",

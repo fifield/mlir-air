@@ -156,6 +156,7 @@ struct air_segment_desc_t {
 struct air_rt_segment_desc_t {
   hsa_queue_t *q;
   hsa_agent_t *agent;
+  void *pdi_buf;
   air_segment_desc_t *segment_desc;
 };
 

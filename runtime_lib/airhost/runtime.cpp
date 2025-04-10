@@ -165,62 +165,14 @@ hsa_status_t air::rocm::Runtime::dispatchRutimeSequence(
   return HSA_STATUS_SUCCESS;
 }
 
-hsa_status_t air::rocm::Runtime::loadSegmentPdi(void **pdi_buf, size_t pdi_size,
-                                                bool do_alloc /* = true */) {
+hsa_status_t air::rocm::Runtime::loadSegmentPdi(void **pdi_buf, const void *pdi_data, size_t pdi_size) {
 
-  void *buf = *pdi_buf;
-  if (do_alloc) {
-    hsa_status_t r = hsa_amd_memory_pool_allocate(global_dev_pool_, pdi_size, 0,
-                                                  const_cast<void **>(&buf));
-    if (r != HSA_STATUS_SUCCESS)
-      return r;
-    std::memcpy(buf, *pdi_buf, pdi_size);
-  }
-  *pdi_buf = buf;
+  hsa_status_t r = hsa_amd_memory_pool_allocate(global_dev_pool_, pdi_size, 0,
+                                                const_cast<void **>(pdi_buf));
+  if (r != HSA_STATUS_SUCCESS)
+    return r;
+  std::memcpy(*pdi_buf, pdi_data, pdi_size);
   return HSA_STATUS_SUCCESS;
-}
-
-hsa_status_t air::rocm::Runtime::RunKernel(const std::string &pdi_file,
-                                           const std::string &insts_file,
-                                           std::vector<void *> &args) {
-  void *pdi_buf = nullptr;
-  hsa_status_t status = HSA_STATUS_SUCCESS;
-
-  std::optional<size_t> pdi_size = load_pdi_file(
-      global_dev_pool_, pdi_file, reinterpret_cast<void **>(&pdi_buf));
-  std::vector<uint32_t> sequence = load_instr_file(insts_file);
-
-  if (!pdi_size || !sequence.size())
-    return HSA_STATUS_ERROR;
-
-  std::cout << "loaded insts file: " << insts_file
-            << " size: " << sequence.size() << "\n";
-
-  status = loadSegmentPdi(&pdi_buf, pdi_size.value(), /*do_alloc=*/false);
-  if (status != HSA_STATUS_SUCCESS)
-    return status;
-  status = dispatchRutimeSequence(pdi_buf, sequence, args);
-  return status;
-}
-
-hsa_status_t air::rocm::Runtime::RunKernel(void *pdi_buf, size_t pdi_size,
-                                           const std::string &insts_file,
-                                           std::vector<void *> &args) {
-  hsa_status_t status = HSA_STATUS_SUCCESS;
-
-  std::vector<uint32_t> sequence = load_instr_file(insts_file);
-
-  if (!pdi_size || !sequence.size())
-    return HSA_STATUS_ERROR;
-
-  std::cout << "loaded insts file: " << insts_file
-            << " size: " << sequence.size() << "\n";
-
-  status = loadSegmentPdi(&pdi_buf, pdi_size);
-  if (status != HSA_STATUS_SUCCESS)
-    return status;
-  status = dispatchRutimeSequence(pdi_buf, sequence, args);
-  return status;
 }
 
 static hsa_status_t IterateAgents(hsa_agent_t agent, void *data) {

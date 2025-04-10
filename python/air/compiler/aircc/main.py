@@ -511,17 +511,19 @@ def run(mlir_module, args=None):
                 + ")"
             )
             run_passes(air_to_npu_passes, air_to_npu_module, opts, air_to_npu_file)
+    
             xclbin_file = "aie.xclbin"
-            if opts.output_file:
+            if opts.xclbin_file:
+                xclbin_file = opts.xclbin_file
+            elif opts.output_file.endswith(".xclbin"):
                 xclbin_file = opts.output_file
+
             if opts.insts_file:
                 insts_file = opts.insts_file
             else:
                 assert xclbin_file.endswith(".xclbin")
                 insts_file = opts.output_file.removesuffix(".xclbin") + ".insts.bin"
-            if opts.xclbin_file:
-                xclbin_file = opts.xclbin_file
-            xclbin_file = opts.xclbin_file or opts.tmpdir + "/air.xclbin"
+            
             aiecc_dir = opts.tmpdir + "/" + "aie.npu.prj"
 
             opts.insts_file = opts.insts_file or opts.tmpdir + "/insts.bin"
@@ -532,15 +534,15 @@ def run(mlir_module, args=None):
                 "--xbridge" if opts.xbridge else "--no-xbridge",
                 "--aie-generate-xclbin",
                 "--aie-generate-pdi",
-                "--aie-generate-txn",
                 "--aie-generate-npu",
                 "--no-compile-host",
-                "--npu-insts-name=" + opts.insts_file,
+                "--xclbin-name=" + xclbin_file,
+                "--pdi-name=" + opts.tmpdir + "/air.pdi",
+                "--npu-insts-name=" + insts_file,
                 "--tmpdir=" + aiecc_dir,
                 air_to_npu_file,
             ]
             aiecc.run(air_to_npu_module, aiecc_options)
-            do_call(["cp", aiecc_dir + "/design.pdi", opts.tmpdir + "/air.pdi"])
 
         lower_airrt_to_airhost(
             Module.parse(str(air_to_aie_module)), air_placed_module, air_mlir_filename

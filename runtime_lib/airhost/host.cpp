@@ -98,13 +98,6 @@ hsa_status_t air_shut_down() {
   return HSA_STATUS_SUCCESS;
 }
 
-hsa_status_t run_kernel(const std::string &pdi_file,
-                        const std::string &insts_file,
-                        std::vector<void *> &args) {
-  return air::rocm::Runtime::getRuntime()->RunKernel(pdi_file, insts_file,
-                                                     args);
-}
-
 hsa_status_t dispatch_segment(std::vector<void *> &args) {
   auto segment_desc = _air_host_active_segment.segment_desc;
   if (!segment_desc)
@@ -116,20 +109,6 @@ hsa_status_t dispatch_segment(std::vector<void *> &args) {
   air_rt_aie_functions_t *mlir = (air_rt_aie_functions_t *)dlsym(
       (void *)_air_host_active_module, func_name.c_str());
 
-  void *pdi_buf = nullptr;
-  size_t pdi_size = mlir->get_pdi(&pdi_buf);
-  if (!pdi_size || !pdi_buf) {
-    printf("Failed to get PDI\n");
-    return HSA_STATUS_ERROR;
-  }
-
-  hsa_status_t r =
-      air::rocm::Runtime::getRuntime()->loadSegmentPdi(&pdi_buf, pdi_size);
-  if (r != HSA_STATUS_SUCCESS) {
-    printf("Failed to load segment PDI!\n");
-    return HSA_STATUS_ERROR;
-  }
-
   uint32_t *insts_buf = nullptr;
   size_t insts_size = mlir->get_insts(reinterpret_cast<void **>(&insts_buf));
   if (!insts_size || !insts_buf) {
@@ -139,7 +118,7 @@ hsa_status_t dispatch_segment(std::vector<void *> &args) {
   std::vector<uint32_t> sequence_vector(
       insts_buf, insts_buf + (insts_size / sizeof(uint32_t)));
   return air::rocm::Runtime::getRuntime()->dispatchRutimeSequence(
-      pdi_buf, sequence_vector, args);
+      _air_host_active_segment.pdi_buf, sequence_vector, args);
 }
 
 air_module_handle_t air_module_load_from_file(const char *filename) {
@@ -246,6 +225,24 @@ uint64_t air_segment_load(const char *name) {
 
   if (VERBOSE)
     std::cout << "load segment: " << segment_name << "\n";
+
+  std::string func_name = "__airrt_" + segment_name + "_aie_functions";
+  air_rt_aie_functions_t *mlir = (air_rt_aie_functions_t *)dlsym(
+      (void *)_air_host_active_module, func_name.c_str());
+
+  void *pdi_buf = nullptr;
+  size_t pdi_size = mlir->get_pdi(&pdi_buf);
+  if (!pdi_size || !pdi_buf) {
+    printf("Failed to get PDI\n");
+    return HSA_STATUS_ERROR;
+  }
+
+  hsa_status_t r = air::rocm::Runtime::getRuntime()->loadSegmentPdi(
+      &_air_host_active_segment.pdi_buf, pdi_buf, pdi_size);
+  if (r != HSA_STATUS_SUCCESS) {
+    printf("Failed to load segment PDI!\n");
+    return HSA_STATUS_ERROR;
+  }
 
   _air_host_active_segment.segment_desc = segment_desc;
   return reinterpret_cast<uint64_t>(segment_desc);

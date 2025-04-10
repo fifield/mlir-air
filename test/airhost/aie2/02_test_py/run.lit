@@ -1,12 +1,10 @@
 //===- run.lit ------------------------------------------------------------===//
 //
-// Copyright (C) 2022, Xilinx Inc.
-// Copyright (C) 2022, Advanced Micro Devices, Inc.
+// Copyright (C) 2025, Advanced Micro Devices, Inc.
 // SPDX-License-Identifier: MIT
 //
 //===----------------------------------------------------------------------===//
 
-// RUN: %PYTHON %S/gen.py
-// RUN: %PYTHON %S/run.py | FileCheck %s
+// RUN: %PYTHON %S/gen_and_run.py | FileCheck %s
 
 // CHECK: PASS!
