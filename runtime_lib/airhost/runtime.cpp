@@ -165,7 +165,9 @@ hsa_status_t air::rocm::Runtime::dispatchRutimeSequence(
   return HSA_STATUS_SUCCESS;
 }
 
-hsa_status_t air::rocm::Runtime::loadSegmentPdi(void **pdi_buf, const void *pdi_data, size_t pdi_size) {
+hsa_status_t air::rocm::Runtime::loadSegmentPdi(void **pdi_buf,
+                                                const void *pdi_data,
+                                                size_t pdi_size) {
 
   hsa_status_t r = hsa_amd_memory_pool_allocate(global_dev_pool_, pdi_size, 0,
                                                 const_cast<void **>(pdi_buf));

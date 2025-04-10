@@ -15,6 +15,7 @@ from air.ir import MemRefType, IntegerAttr
 import numpy as np
 from ml_dtypes import bfloat16
 
+
 def to_type(dtype):
     if dtype == np.int32:
         return T.i32()

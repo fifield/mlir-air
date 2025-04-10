@@ -511,7 +511,7 @@ def run(mlir_module, args=None):
                 + ")"
             )
             run_passes(air_to_npu_passes, air_to_npu_module, opts, air_to_npu_file)
-    
+
             xclbin_file = "aie.xclbin"
             if opts.xclbin_file:
                 xclbin_file = opts.xclbin_file
@@ -523,7 +523,7 @@ def run(mlir_module, args=None):
             else:
                 assert xclbin_file.endswith(".xclbin")
                 insts_file = opts.output_file.removesuffix(".xclbin") + ".insts.bin"
-            
+
             aiecc_dir = opts.tmpdir + "/" + "aie.npu.prj"
 
             opts.insts_file = opts.insts_file or opts.tmpdir + "/insts.bin"

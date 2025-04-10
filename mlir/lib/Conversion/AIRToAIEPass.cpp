@@ -433,9 +433,8 @@ void createAIEModulesAndOutlineCores(
                      StringAttr::get(builder.getContext(), segment_name));
     AIE::DeviceOp::ensureTerminator(aie_dev.getRegion(), builder,
                                     aie_dev.getLoc());
-    seg.walk([&](xilinx::air::HerdOp h) {
-      aie_modules.push_back({aie_dev, h});
-    });
+    seg.walk(
+        [&](xilinx::air::HerdOp h) { aie_modules.push_back({aie_dev, h}); });
     // If the device has memtiles, then outline memtiles
     if (aie_dev.getTargetModel().getNumMemTileRows()) {
       outlineAIEMemtiles(builder, aie_dev, seg, options);
@@ -3531,17 +3530,19 @@ public:
 
         // AIE2 dma metadata format
         builder.setInsertionPoint(device.getBody()->getTerminator());
-        if(failed(createShimDMAAllocationOps(
-            builder, ctx, herd, shimDmaAlloc.s2mm_allocs,
-            AIE::DMAChannelDir::S2MM, chan_renumber_reverse_map, dma_allocations))) {
-              signalPassFailure();
-              return;
+        if (failed(createShimDMAAllocationOps(
+                builder, ctx, herd, shimDmaAlloc.s2mm_allocs,
+                AIE::DMAChannelDir::S2MM, chan_renumber_reverse_map,
+                dma_allocations))) {
+          signalPassFailure();
+          return;
         }
-        if(failed(createShimDMAAllocationOps(
-            builder, ctx, herd, shimDmaAlloc.mm2s_allocs,
-            AIE::DMAChannelDir::MM2S, chan_renumber_reverse_map, dma_allocations))) {
-              signalPassFailure();
-              return;
+        if (failed(createShimDMAAllocationOps(
+                builder, ctx, herd, shimDmaAlloc.mm2s_allocs,
+                AIE::DMAChannelDir::MM2S, chan_renumber_reverse_map,
+                dma_allocations))) {
+          signalPassFailure();
+          return;
         }
 
         auto segment_name =
@@ -3565,16 +3566,18 @@ public:
         }
         builder.setInsertionPoint(device.getBody()->getTerminator());
         if (failed(createShimDMAAllocationOps(
-            builder, ctx, seg, shimDmaAlloc.s2mm_allocs,
-            AIE::DMAChannelDir::S2MM, chan_renumber_reverse_map, dma_allocations))) {
-              signalPassFailure();
-              return;
+                builder, ctx, seg, shimDmaAlloc.s2mm_allocs,
+                AIE::DMAChannelDir::S2MM, chan_renumber_reverse_map,
+                dma_allocations))) {
+          signalPassFailure();
+          return;
         }
         if (failed(createShimDMAAllocationOps(
-            builder, ctx, seg, shimDmaAlloc.mm2s_allocs,
-            AIE::DMAChannelDir::MM2S, chan_renumber_reverse_map, dma_allocations))) {
-              signalPassFailure();
-              return;
+                builder, ctx, seg, shimDmaAlloc.mm2s_allocs,
+                AIE::DMAChannelDir::MM2S, chan_renumber_reverse_map,
+                dma_allocations))) {
+          signalPassFailure();
+          return;
         }
 
         auto segment_name =
@@ -3830,9 +3833,8 @@ FailureOr<ModuleOp> convertAIRToAIE(mlir::RewriterBase &rewriter,
                                        /*.ctrl_packet = */ false,
                                        /* .device = */ *device};
   std::vector<std::pair<ModuleOp, xilinx::air::HerdOp>> aie_modules;
-  p.walk([&](xilinx::air::HerdOp h) {
-    aie_modules.push_back({aie_module, h});
-  });
+  p.walk(
+      [&](xilinx::air::HerdOp h) { aie_modules.push_back({aie_module, h}); });
   std::map<AIE::TileOp, air::HerdOp> tileToHerdMap;
   for (auto &p : aie_modules) {
     ModuleOp aie_module = std::get<0>(p);
