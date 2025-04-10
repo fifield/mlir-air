@@ -32,8 +32,6 @@ hsa_status_t air_load_airbin(hsa_agent_t *agent, hsa_queue_t *q,
 hsa_status_t run_kernel(const std::string &pdi_file,
                         const std::string &insts_file,
                         std::vector<void *> &args);
-hsa_status_t dispatch_sequence(const std::string &insts_file,
-                               std::vector<void *> &args);
 // temporary function to dispatch the active segment
 hsa_status_t dispatch_segment(std::vector<void *> &args);
 

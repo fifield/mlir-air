@@ -81,15 +81,6 @@ void defineAIRHostModule(nb::module_ &m) {
           return run_kernel(pdi_file, insts_file, arg_ptrs);
         });
 
-  m.def("dispatch_sequence",
-        [](const std::string &insts_file,
-           std::vector<nb::ndarray<>> &args) -> uint64_t {
-          std::vector<void *> arg_ptrs;
-          for (auto &arg : args)
-            arg_ptrs.push_back(arg.data());
-          return dispatch_sequence(insts_file, arg_ptrs);
-        });
-
   m.def("dispatch_segment", [](std::vector<nb::ndarray<>> &args) -> uint64_t {
     std::vector<void *> arg_ptrs;
     for (auto &arg : args)

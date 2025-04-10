@@ -524,7 +524,8 @@ def run(mlir_module, args=None):
             xclbin_file = opts.xclbin_file or opts.tmpdir + "/air.xclbin"
             aiecc_dir = opts.tmpdir + "/" + "aie.npu.prj"
 
-            opts.insts_file = opts.insts_file or opts.tmpdir + "/insts.txt"
+            opts.insts_file = opts.insts_file or opts.tmpdir + "/insts.bin"
+
             aiecc_options = (["-v"] if opts.verbose else []) + [
                 "--no-aiesim",
                 "--xchesscc" if opts.xchesscc else "--no-xchesscc",

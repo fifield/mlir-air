@@ -98,7 +98,8 @@ std::optional<size_t> air::rocm::Runtime::getAllocationSize(void *ptr) {
 }
 
 hsa_status_t air::rocm::Runtime::dispatchRutimeSequence(
-    std::vector<uint32_t> &sequence_vector, std::vector<void *> &args) {
+    void *pdi_buf, std::vector<uint32_t> &sequence_vector,
+    std::vector<void *> &args) {
 
   void *sequence = nullptr;
   hsa_status_t r = hsa_amd_memory_pool_allocate(
@@ -131,12 +132,12 @@ hsa_status_t air::rocm::Runtime::dispatchRutimeSequence(
   // Creating the payload for the packet
   hsa_amd_aie_ert_start_kernel_data_t *cmd_payload = nullptr;
   hsa_status_t status = hsa_amd_memory_pool_allocate(
-      global_dev_pool_, 64, 0, reinterpret_cast<void **>(&cmd_payload));
+      global_mem_pool_, 64, 0, reinterpret_cast<void **>(&cmd_payload));
   if (status != HSA_STATUS_SUCCESS)
     return status;
 
   // Selecting the PDI to use with this command
-  cmd_payload->cu_mask = 0x1;
+  cmd_payload->pdi_addr = pdi_buf;
   // Transaction opcode
   cmd_payload->data[0] = 0x3;
   cmd_payload->data[1] = 0x0;
@@ -164,30 +165,19 @@ hsa_status_t air::rocm::Runtime::dispatchRutimeSequence(
   return HSA_STATUS_SUCCESS;
 }
 
-hsa_status_t air::rocm::Runtime::loadSegmentPdi(const void *pdi_buf,
-                                                size_t pdi_size,
-                                                bool do_alloc) {
+hsa_status_t air::rocm::Runtime::loadSegmentPdi(void **pdi_buf, size_t pdi_size,
+                                                bool do_alloc /* = true */) {
 
-  void *buf = (void *)pdi_buf;
+  void *buf = *pdi_buf;
   if (do_alloc) {
     hsa_status_t r = hsa_amd_memory_pool_allocate(global_dev_pool_, pdi_size, 0,
                                                   const_cast<void **>(&buf));
     if (r != HSA_STATUS_SUCCESS)
       return r;
-    std::memcpy(buf, pdi_buf, pdi_size);
+    std::memcpy(buf, *pdi_buf, pdi_size);
   }
-
-  hsa_amd_aie_ert_hw_ctx_cu_config_addr_t cu_config{
-      .cu_config_addr = reinterpret_cast<uint64_t>(buf),
-      .cu_func = 0,
-      .cu_size = static_cast<uint32_t>(pdi_size)};
-
-  hsa_amd_aie_ert_hw_ctx_config_cu_param_addr_t config_cu_args{
-      .num_cus = 1, .cu_configs = &cu_config};
-
-  // Configure the queue's hardware context.
-  return hsa_amd_queue_hw_ctx_config(
-      aie_queue_, HSA_AMD_QUEUE_AIE_ERT_HW_CXT_CONFIG_CU, &config_cu_args);
+  *pdi_buf = buf;
+  return HSA_STATUS_SUCCESS;
 }
 
 hsa_status_t air::rocm::Runtime::RunKernel(const std::string &pdi_file,
@@ -206,14 +196,14 @@ hsa_status_t air::rocm::Runtime::RunKernel(const std::string &pdi_file,
   std::cout << "loaded insts file: " << insts_file
             << " size: " << sequence.size() << "\n";
 
-  status = loadSegmentPdi(pdi_buf, pdi_size.value(), /*do_alloc=*/false);
+  status = loadSegmentPdi(&pdi_buf, pdi_size.value(), /*do_alloc=*/false);
   if (status != HSA_STATUS_SUCCESS)
     return status;
-  status = dispatchRutimeSequence(sequence, args);
+  status = dispatchRutimeSequence(pdi_buf, sequence, args);
   return status;
 }
 
-hsa_status_t air::rocm::Runtime::RunKernel(const void *pdi_buf, size_t pdi_size,
+hsa_status_t air::rocm::Runtime::RunKernel(void *pdi_buf, size_t pdi_size,
                                            const std::string &insts_file,
                                            std::vector<void *> &args) {
   hsa_status_t status = HSA_STATUS_SUCCESS;
@@ -226,10 +216,10 @@ hsa_status_t air::rocm::Runtime::RunKernel(const void *pdi_buf, size_t pdi_size,
   std::cout << "loaded insts file: " << insts_file
             << " size: " << sequence.size() << "\n";
 
-  status = loadSegmentPdi(pdi_buf, pdi_size);
+  status = loadSegmentPdi(&pdi_buf, pdi_size);
   if (status != HSA_STATUS_SUCCESS)
     return status;
-  status = dispatchRutimeSequence(sequence, args);
+  status = dispatchRutimeSequence(pdi_buf, sequence, args);
   return status;
 }
 
@@ -273,7 +263,8 @@ static hsa_status_t IterateMemPool(hsa_amd_memory_pool_t pool, void *data) {
   if ((global_pool_flags & HSA_AMD_MEMORY_POOL_GLOBAL_FLAG_COARSE_GRAINED) &&
       (global_pool_flags & HSA_REGION_GLOBAL_FLAG_KERNARG)) {
     debug_print("Runtime: found global segment");
-    *static_cast<hsa_amd_memory_pool_t *>(data) = pool;
+    reinterpret_cast<std::vector<hsa_amd_memory_pool_t> *>(data)->push_back(
+        pool);
   }
   return status;
 }
@@ -294,7 +285,8 @@ static hsa_status_t IterateDevPool(hsa_amd_memory_pool_t pool, void *data) {
   if ((global_pool_flags & HSA_AMD_MEMORY_POOL_GLOBAL_FLAG_COARSE_GRAINED) &&
       !(global_pool_flags & HSA_REGION_GLOBAL_FLAG_KERNARG)) {
     debug_print("Runtime: found dev segment");
-    *static_cast<hsa_amd_memory_pool_t *>(data) = pool;
+    reinterpret_cast<std::vector<hsa_amd_memory_pool_t> *>(data)->push_back(
+        pool);
   }
 
   return status;
@@ -307,12 +299,16 @@ void air::rocm::Runtime::FindAieAgents() {
 
 void air::rocm::Runtime::InitMemSegments() {
   debug_print("Runtime: initializing memory pools");
-  hsa_amd_agent_iterate_memory_pools(
-      aie_agents_.front(), &IterateMemPool,
-      reinterpret_cast<void *>(&global_mem_pool_));
-  hsa_amd_agent_iterate_memory_pools(
-      aie_agents_.front(), &IterateDevPool,
-      reinterpret_cast<void *>(&global_dev_pool_));
+  std::vector<hsa_amd_memory_pool_t> mem_pools;
+  std::vector<hsa_amd_memory_pool_t> dev_pools;
+  hsa_amd_agent_iterate_memory_pools(aie_agents_.front(), &IterateMemPool,
+                                     reinterpret_cast<void *>(&mem_pools));
+  hsa_amd_agent_iterate_memory_pools(aie_agents_.front(), &IterateDevPool,
+                                     reinterpret_cast<void *>(&dev_pools));
+  assert(mem_pools.size() >= 1);
+  assert(dev_pools.size() >= 1);
+  global_mem_pool_ = mem_pools.front();
+  global_dev_pool_ = dev_pools.front();
 }
 
 void air::rocm::Runtime::InitAieQueue(uint32_t size) {
