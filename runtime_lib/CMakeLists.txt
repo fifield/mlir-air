@@ -27,7 +27,7 @@ endif()
 
 project(air_runtime_lib LANGUAGES CXX C)
 
-set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED YES)
 
 find_package(LibXAIE REQUIRED)
