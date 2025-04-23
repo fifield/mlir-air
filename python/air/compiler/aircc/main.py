@@ -187,7 +187,7 @@ def run_passes(pass_pipeline, mlir_module, opts, outputfile=None):
             g.write(str(mlir_module))
 
 
-def lower_airrt_to_airhost(air_to_aie_module, air_placed_module, air_mlir_filename):
+def lower_airrt_to_airhost(air_to_aie_module, air_mlir_filename):
     pass_pipeline = "air-split-devices{"
     pass_pipeline = pass_pipeline + f"output-prefix={opts.tmpdir}/" + "}"
     run_passes("builtin.module(" + pass_pipeline + ")", air_to_aie_module, opts)
@@ -512,48 +512,9 @@ def run(mlir_module, args=None):
             )
             run_passes(air_to_npu_passes, air_to_npu_module, opts, air_to_npu_file)
 
-            xclbin_file = "aie.xclbin"
-            if opts.xclbin_file:
-                xclbin_file = opts.xclbin_file
-            elif opts.output_file.endswith(".xclbin"):
-                xclbin_file = opts.output_file
-
-            if opts.insts_file:
-                insts_file = opts.insts_file
-            else:
-                assert xclbin_file.endswith(".xclbin")
-                insts_file = opts.output_file.removesuffix(".xclbin") + ".insts.bin"
-            
+            opts.insts_file = opts.insts_file or opts.tmpdir + "/insts.bin"
+            opts.xclbin_file = opts.xclbin_file or opts.tmpdir + "/aie.xclbin"
             aiecc_dir = opts.tmpdir + "/" + "aie.npu.prj"
-
-            if opts.output_format == "xclbin":
-                aiecc_output_file_options = ["--aie-generate-xclbin"]
-            elif opts.output_format == "txn":
-                aiecc_output_file_options = ["--aie-generate-txn"]
-            else:
-                print("Error: unknown output-format")
-                sys.exit(1)
-            aiecc_output_file_options = aiecc_output_file_options + [
-                (
-                    "--xclbin-name=" + xclbin_file
-                    if opts.output_format == "xclbin"
-                    else ""
-                ),
-                (
-                    "--xclbin-kernel-name=" + opts.kernel_name
-                    if opts.kernel_name
-                    else ""
-                ),
-                (
-                    "--xclbin-instance-name=" + opts.instance_name
-                    if opts.instance_name
-                    else ""
-                ),
-                ("--xclbin-kernel-id=" + opts.kernel_id if opts.kernel_id else ""),
-            ]
-            aiecc_existing_xclbin_options = [
-                ("--xclbin-input=" + opts.xclbin_input if opts.xclbin_input else "")
-            ]
             aiecc_options = (
                 (["-v"] if opts.verbose else [])
                 + [
@@ -561,22 +522,24 @@ def run(mlir_module, args=None):
                     "--xchesscc" if opts.xchesscc else "--no-xchesscc",
                     "--xbridge" if opts.xbridge else "--no-xbridge",
                     "--aie-generate-xclbin",
+                    "--aie-generate-npu-insts",
                     "--aie-generate-pdi",
-                    "--aie-generate-npu",
-                    "--no-compile-host",
-                    "--xclbin-name=" + xclbin_file,
+                    "--xclbin-name=" + opts.xclbin_file,
+                    "--npu-insts-name=" + opts.insts_file,
                     "--pdi-name=" + opts.tmpdir + "/air.pdi",
-                    "--npu-insts-name=" + insts_file,
+                    "--no-compile-host",
                     "--tmpdir=" + aiecc_dir,
-                ]
-                + aiecc_output_file_options
-                + aiecc_existing_xclbin_options
-                + [air_to_npu_file]
+                ] +
+                ["--xclbin-kernel-name=" + opts.kernel_name] if opts.kernel_name else [] +
+                ["--xclbin-instance-name=" + opts.instance_name] if opts.instance_name else [] +
+                ["--xclbin-kernel-id=" + opts.kernel_id] if opts.kernel_id else [] +
+                ["--xclbin-input=" + opts.xclbin_input] if opts.xclbin_input else [] +
+                [air_to_npu_file]
             )
             aiecc.run(air_to_npu_module, aiecc_options)
 
         lower_airrt_to_airhost(
-            Module.parse(str(air_to_aie_module)), air_placed_module, air_mlir_filename
+            Module.parse(str(air_to_aie_module)), air_mlir_filename
         )
 
 

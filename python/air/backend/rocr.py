@@ -41,7 +41,6 @@ class HSACompileArtifact:
             so: shared object file name/path
             function_name: function name
             compiled_module: compiled module
-            insts: instruction file name/path
         """
         self.so_file = so
         self.function_name = function_name

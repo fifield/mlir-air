@@ -169,9 +169,8 @@ def parse_args(args=None):
     parser.add_argument(
         "--output-format",
         type=str,
-        choices=["xclbin", "txn"],
         dest="output_format",
-        default="xclbin",
+        default="",
         help="File format for the generated binary",
     )
     parser.add_argument(
