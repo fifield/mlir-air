@@ -21,8 +21,7 @@ int main(int argc, char *argv[]) {
 
   air_module_handle_t handle = air_module_load_from_file(nullptr);
   if (!handle) {
-    std::cout << "Failed to load air module"
-              << "\n";
+    std::cout << "Failed to load air module" << "\n";
     return -1;
   }
 
@@ -34,8 +33,7 @@ int main(int argc, char *argv[]) {
                           tensor_t<uint32_t, 1> *))dlsym((void *)handle,
                                                          "_mlir_ciface_mul");
   if (!mul_fn) {
-    std::cout << "Failed to locate _mlir_ciface_mul in .so"
-              << "\n";
+    std::cout << "Failed to locate _mlir_ciface_mul in .so" << "\n";
     return -1;
   }
 
@@ -82,11 +80,9 @@ int main(int argc, char *argv[]) {
   air_free(output0.data);
 
   if (errs) {
-    std::cout << "failed."
-              << "\n";
+    std::cout << "failed." << "\n";
     return -1;
   }
-  std::cout << "PASS!"
-            << "\n";
+  std::cout << "PASS!" << "\n";
   return 0;
 }
