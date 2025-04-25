@@ -25,7 +25,13 @@ def parse_args(args=None):
         "-i",
         dest="insts_file",
         default="",
-        help="Output insts file name. Only used for compilation on an NPU.",
+        help="Output insts file name for NPU.",
+    )
+    parser.add_argument(
+        "-x",
+        dest="xclbin_file",
+        default="",
+        help="Output xclbin file name for NPU.",
     )
     parser.add_argument(
         "--tmpdir",
@@ -163,9 +169,8 @@ def parse_args(args=None):
     parser.add_argument(
         "--output-format",
         type=str,
-        choices=["xclbin", "txn"],
         dest="output_format",
-        default="xclbin",
+        default="",
         help="File format for the generated binary",
     )
     parser.add_argument(
