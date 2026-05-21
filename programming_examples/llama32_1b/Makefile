@@ -29,10 +29,17 @@ MODEL    ?= instruct
 # WEIGHTS=hf (default)        — load real Meta weights from HuggingFace
 # WEIGHTS=synthetic           — deterministic random weights (no HF, for CI)
 WEIGHTS ?= hf
+QUANT ?= bf16
+AWQ_WEIGHTS ?=
 ifeq ($(WEIGHTS),synthetic)
   WEIGHTS_FLAG := --synthetic-weights
 else
   WEIGHTS_FLAG :=
+endif
+ifeq ($(QUANT),awq)
+  QUANT_FLAG := --quant awq --awq-weights $(AWQ_WEIGHTS)
+else
+  QUANT_FLAG := --quant bf16
 endif
 
 .PHONY: help compile run profile verify chat clean
@@ -62,6 +69,8 @@ help:
 	@echo "  N_TOKENS=1000         Max decode tokens (instruct model stops early on EOT)"
 	@echo "  PROMPT=\"...\"          Input prompt text"
 	@echo "  MODEL=base|instruct   Model variant (default: instruct)"
+	@echo "  QUANT=bf16|awq        Weight format (default: bf16)"
+	@echo "  AWQ_WEIGHTS=/path     Repacked AWQ model dir for QUANT=awq"
 	@echo ""
 	@echo "Examples:"
 	@echo "  make run N_TOKENS=50"
@@ -81,22 +90,22 @@ compile:
 ## Run unified inference
 run:
 	cd $(BUILD_DIR) && python3 $(srcdir)/llama32_1b_inference.py \
-		--run-only --n-tokens $(N_TOKENS) --prompt "$(PROMPT)" --model $(MODEL) $(WEIGHTS_FLAG)
+		--run-only --n-tokens $(N_TOKENS) --prompt "$(PROMPT)" --model $(MODEL) $(WEIGHTS_FLAG) $(QUANT_FLAG)
 
 ## Run with detailed profiling breakdown
 profile:
 	cd $(BUILD_DIR) && python3 $(srcdir)/llama32_1b_inference.py \
-		--run-only --n-tokens $(N_TOKENS) --profile --prompt "$(PROMPT)" --model $(MODEL) $(WEIGHTS_FLAG)
+		--run-only --n-tokens $(N_TOKENS) --profile --prompt "$(PROMPT)" --model $(MODEL) $(WEIGHTS_FLAG) $(QUANT_FLAG)
 
 ## Run with CPU reference verification
 verify:
 	cd $(BUILD_DIR) && python3 $(srcdir)/llama32_1b_inference.py \
-		--run-only --n-tokens $(N_TOKENS) --verify --profile --prompt "$(PROMPT)" --model $(MODEL) $(WEIGHTS_FLAG)
+		--run-only --n-tokens $(N_TOKENS) --verify --profile --prompt "$(PROMPT)" --model $(MODEL) $(WEIGHTS_FLAG) $(QUANT_FLAG)
 
 ## Interactive chat: prepare runtime once, then loop on prompts
 chat:
 	cd $(BUILD_DIR) && python3 $(srcdir)/llama32_1b_inference.py \
-		--run-only --interactive --n-tokens $(N_TOKENS) --model $(MODEL) $(WEIGHTS_FLAG)
+		--run-only --interactive --n-tokens $(N_TOKENS) --model $(MODEL) $(WEIGHTS_FLAG) $(QUANT_FLAG)
 
 ## Compile and run in one step
 all: compile profile

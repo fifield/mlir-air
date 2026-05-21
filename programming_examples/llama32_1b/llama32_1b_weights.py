@@ -19,10 +19,11 @@ Usage:
     print(weights.layers[0].wq.shape)  # (2048, 2048)
 """
 
+import json
 import os
 import glob as glob_module
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 import numpy as np
 from ml_dtypes import bfloat16
@@ -82,6 +83,35 @@ class LayerWeights:
     w_down: np.ndarray  # (8192, 2048)
 
 
+@dataclass
+class AwqLinear:
+    """Decode-friendly repacked AWQ linear weight.
+
+    qweight is row-major by output feature: shape ``(m, k / 2)`` with two
+    uint4 weights packed per byte along K. params is shape
+    ``(m, 2 * k / group_size)`` with interleaved bf16 ``[scale, zero]`` pairs.
+    """
+
+    qweight: np.ndarray
+    params: np.ndarray
+    k: int
+    m: int
+    group_size: int = 128
+
+
+@dataclass
+class AwqLayerWeights:
+    """Repacked AWQ linears for a single transformer layer."""
+
+    wq: AwqLinear
+    wk: AwqLinear
+    wv: AwqLinear
+    wo: AwqLinear
+    w_gate: AwqLinear
+    w_up: AwqLinear
+    w_down: AwqLinear
+
+
 # ---------------------------------------------------------------------------
 # Full model weight container
 # ---------------------------------------------------------------------------
@@ -102,6 +132,9 @@ class LlamaWeights:
     layers: List[LayerWeights] = field(default_factory=list)
     final_norm: np.ndarray = None  # (2048,)
     lm_head: np.ndarray = None  # (128256, 2048)
+    is_awq: bool = False
+    awq_layers: Optional[List[AwqLayerWeights]] = None
+    awq_lm_head: Optional[AwqLinear] = None
 
 
 # ---------------------------------------------------------------------------
@@ -186,6 +219,104 @@ def _load_tensor(file_handle, key: str, dtype) -> np.ndarray:
     if hasattr(tensor, "numpy"):
         tensor = tensor.numpy()
     return tensor.astype(dtype)
+
+
+def _collect_safetensor_keys(safetensor_files: List[str]) -> Dict[str, str]:
+    """Map each tensor key to the safetensors file containing it."""
+    from safetensors import safe_open
+
+    key_to_file = {}
+    for filepath in safetensor_files:
+        with safe_open(filepath, framework="numpy") as f:
+            for key in f.keys():
+                key_to_file[key] = filepath
+    return key_to_file
+
+
+def _load_required_tensor(key_to_file: Dict[str, str], key: str, dtype) -> np.ndarray:
+    """Load a required tensor from a key->file map."""
+    from safetensors import safe_open
+
+    if key not in key_to_file:
+        raise KeyError(f"Missing weight: {key}")
+    with safe_open(key_to_file[key], framework="numpy") as f:
+        return _load_tensor(f, key, dtype)
+
+
+def _read_awq_group_size(model_path: str, default: int = 128) -> int:
+    """Read repacked AWQ group size from manifest or config.json."""
+    manifest_path = os.path.join(model_path, "awq_repack_manifest.json")
+    if os.path.exists(manifest_path):
+        with open(manifest_path, "r", encoding="utf-8") as handle:
+            manifest = json.load(handle)
+        return int(manifest.get("group_size", default))
+
+    config_path = os.path.join(model_path, "config.json")
+    if os.path.exists(config_path):
+        with open(config_path, "r", encoding="utf-8") as handle:
+            cfg = json.load(handle)
+        quant_cfg = cfg.get("quantization_config", {})
+        return int(quant_cfg.get("group_size", default))
+
+    return default
+
+
+def _validate_awq_linear_shape(awq: AwqLinear) -> None:
+    """Validate a repacked AWQ linear without materializing dequantized rows."""
+    if awq.k % 2 != 0:
+        raise ValueError(f"AWQ K must be even for uint4 packing, got {awq.k}")
+    expected_qweight = (awq.m, awq.k // 2)
+    if awq.qweight.shape != expected_qweight:
+        raise ValueError(
+            f"qweight shape {awq.qweight.shape} does not match {expected_qweight}"
+        )
+    groups = (awq.k + awq.group_size - 1) // awq.group_size
+    expected_params = (awq.m, groups * 2)
+    if awq.params.shape != expected_params:
+        raise ValueError(
+            f"params shape {awq.params.shape} does not match {expected_params}"
+        )
+
+
+def _dequant_repacked_awq_linear(awq: AwqLinear, dtype=bfloat16) -> np.ndarray:
+    """Dequantize a repacked AWQ linear to BF16 rows ``(m, k)``."""
+    qweight = np.asarray(awq.qweight, dtype=np.uint8)
+    params = np.asarray(awq.params, dtype=np.float32)
+    _validate_awq_linear_shape(awq)
+
+    unpacked = np.empty((awq.m, awq.k), dtype=np.uint8)
+    unpacked[:, 0::2] = qweight & np.uint8(0xF)
+    unpacked[:, 1::2] = (qweight >> np.uint8(4)) & np.uint8(0xF)
+    group_ids = np.arange(awq.k) // awq.group_size
+    scales = params[:, 0::2]
+    zeros = params[:, 1::2]
+    rows = (unpacked.astype(np.float32) - zeros[:, group_ids]) * scales[:, group_ids]
+    return rows.astype(dtype)
+
+
+def _load_awq_linear(
+    key_to_file: Dict[str, str],
+    prefix: str,
+    *,
+    k: int,
+    m: int,
+    group_size: int,
+) -> AwqLinear:
+    """Load a repacked AWQ linear by module prefix."""
+    q_key = f"{prefix}.qweight_repacked"
+    p_key = f"{prefix}.params_interleaved"
+    qweight = _load_required_tensor(key_to_file, q_key, np.uint8)
+    params = _load_required_tensor(key_to_file, p_key, bfloat16)
+    awq = AwqLinear(
+        qweight=np.ascontiguousarray(qweight),
+        params=np.ascontiguousarray(params),
+        k=k,
+        m=m,
+        group_size=group_size,
+    )
+    # Validate shapes immediately so a missing/incorrect repack fails at load.
+    _validate_awq_linear_shape(awq)
+    return awq
 
 
 # ---------------------------------------------------------------------------
@@ -324,6 +455,138 @@ def load_weights(
         layers=layers,
         final_norm=final_norm,
         lm_head=lm_head,
+    )
+
+
+def load_awq_weights(
+    model_name_or_path: str,
+    dtype=bfloat16,
+    config: Optional[LlamaConfig] = None,
+) -> LlamaWeights:
+    """Load repacked AWQ weights and CPU-dequantize BF16 fields.
+
+    Stage 3 keeps the existing BF16 prefill/decode runtime usable by
+    reconstructing every quantized linear into the normal ``LayerWeights`` and
+    ``lm_head`` fields, while also retaining explicit ``AwqLinear`` containers
+    for the future fused AWQ decode kernels.
+    """
+    if config is None:
+        config = LlamaConfig()
+
+    safetensor_files = _resolve_safetensor_files(model_name_or_path)
+    key_to_file = _collect_safetensor_keys(safetensor_files)
+    group_size = _read_awq_group_size(model_name_or_path)
+
+    embed_table = _load_required_tensor(key_to_file, "model.embed_tokens.weight", dtype)
+    assert embed_table.shape == (config.vocab_size, config.emb_dim), (
+        f"embed_table shape mismatch: expected "
+        f"({config.vocab_size}, {config.emb_dim}), got {embed_table.shape}"
+    )
+
+    final_norm = _load_required_tensor(key_to_file, "model.norm.weight", dtype)
+    assert final_norm.shape == (config.emb_dim,), (
+        f"final_norm shape mismatch: {final_norm.shape}"
+    )
+
+    awq_layers: List[AwqLayerWeights] = []
+    layers: List[LayerWeights] = []
+    kv_dim = config.n_kv_heads * config.head_dim
+    for layer_idx in range(config.n_layers):
+        prefix = f"model.layers.{layer_idx}"
+        attn_norm = _load_required_tensor(
+            key_to_file, f"{prefix}.input_layernorm.weight", dtype
+        )
+        ffn_norm = _load_required_tensor(
+            key_to_file, f"{prefix}.post_attention_layernorm.weight", dtype
+        )
+
+        awq_layer = AwqLayerWeights(
+            wq=_load_awq_linear(
+                key_to_file,
+                f"{prefix}.self_attn.q_proj",
+                k=config.emb_dim,
+                m=config.n_heads * config.head_dim,
+                group_size=group_size,
+            ),
+            wk=_load_awq_linear(
+                key_to_file,
+                f"{prefix}.self_attn.k_proj",
+                k=config.emb_dim,
+                m=kv_dim,
+                group_size=group_size,
+            ),
+            wv=_load_awq_linear(
+                key_to_file,
+                f"{prefix}.self_attn.v_proj",
+                k=config.emb_dim,
+                m=kv_dim,
+                group_size=group_size,
+            ),
+            wo=_load_awq_linear(
+                key_to_file,
+                f"{prefix}.self_attn.o_proj",
+                k=config.emb_dim,
+                m=config.emb_dim,
+                group_size=group_size,
+            ),
+            w_gate=_load_awq_linear(
+                key_to_file,
+                f"{prefix}.mlp.gate_proj",
+                k=config.emb_dim,
+                m=config.hidden_dim,
+                group_size=group_size,
+            ),
+            w_up=_load_awq_linear(
+                key_to_file,
+                f"{prefix}.mlp.up_proj",
+                k=config.emb_dim,
+                m=config.hidden_dim,
+                group_size=group_size,
+            ),
+            w_down=_load_awq_linear(
+                key_to_file,
+                f"{prefix}.mlp.down_proj",
+                k=config.hidden_dim,
+                m=config.emb_dim,
+                group_size=group_size,
+            ),
+        )
+        awq_layers.append(awq_layer)
+
+        layers.append(
+            LayerWeights(
+                attn_norm=attn_norm,
+                wq=np.ascontiguousarray(_dequant_repacked_awq_linear(awq_layer.wq, dtype).T),
+                wk=np.ascontiguousarray(_dequant_repacked_awq_linear(awq_layer.wk, dtype).T),
+                wv=np.ascontiguousarray(_dequant_repacked_awq_linear(awq_layer.wv, dtype).T),
+                wo=np.ascontiguousarray(_dequant_repacked_awq_linear(awq_layer.wo, dtype).T),
+                ffn_norm=ffn_norm,
+                w_gate=np.ascontiguousarray(_dequant_repacked_awq_linear(awq_layer.w_gate, dtype).T),
+                w_up=np.ascontiguousarray(_dequant_repacked_awq_linear(awq_layer.w_up, dtype).T),
+                w_down=np.ascontiguousarray(_dequant_repacked_awq_linear(awq_layer.w_down, dtype).T),
+            )
+        )
+
+    awq_lm_head = _load_awq_linear(
+        key_to_file,
+        "lm_head",
+        k=config.emb_dim,
+        m=config.vocab_size,
+        group_size=group_size,
+    )
+    lm_head = _dequant_repacked_awq_linear(awq_lm_head, dtype)
+    assert lm_head.shape == (config.vocab_size, config.emb_dim), (
+        f"lm_head shape mismatch: {lm_head.shape}"
+    )
+
+    return LlamaWeights(
+        embed_table=embed_table,
+        layers=layers,
+        final_norm=final_norm,
+        lm_head=lm_head,
+        is_awq=True,
+        awq_layers=awq_layers,
+        awq_lm_head=awq_lm_head,
     )
 
 
