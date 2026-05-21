@@ -148,6 +148,59 @@ def dequant_repacked_awq(
     return (qweight_nk.astype(np.float32) - zeros[:, group_ids]) * scales[:, group_ids]
 
 
+def dequant_repacked_awq_rows(
+    repacked_qweight: np.ndarray,
+    params_interleaved: np.ndarray,
+    *,
+    k: int,
+    group_size: int,
+    row_start: int,
+    row_stop: int,
+) -> np.ndarray:
+    """Reference dequant for a row slice of repacked layout.
+
+    This is useful for very large outputs such as ``lm_head`` where full
+    ``(vocab, K)`` dequantization would consume unnecessary memory.
+    """
+    return dequant_repacked_awq(
+        repacked_qweight[row_start:row_stop],
+        params_interleaved[row_start:row_stop],
+        k=k,
+        group_size=group_size,
+    )
+
+
+def linear_output_repacked_awq(
+    x: np.ndarray,
+    repacked_qweight: np.ndarray,
+    params_interleaved: np.ndarray,
+    *,
+    k: int,
+    group_size: int,
+    chunk_rows: int = 4096,
+) -> np.ndarray:
+    """Compute ``x @ W`` from repacked rows without materializing all of W."""
+    x = np.asarray(x, dtype=np.float32)
+    if x.shape[-1] != k:
+        raise ValueError(f"input last dim {x.shape[-1]} does not match K={k}")
+    n_rows = np.asarray(repacked_qweight).shape[0]
+    out = np.empty(x.shape[:-1] + (n_rows,), dtype=np.float32)
+    x2 = x.reshape(-1, k)
+    out2 = out.reshape(-1, n_rows)
+    for row_start in range(0, n_rows, chunk_rows):
+        row_stop = min(row_start + chunk_rows, n_rows)
+        weight_rows = dequant_repacked_awq_rows(
+            repacked_qweight,
+            params_interleaved,
+            k=k,
+            group_size=group_size,
+            row_start=row_start,
+            row_stop=row_stop,
+        )
+        out2[:, row_start:row_stop] = x2 @ weight_rows.T
+    return out
+
+
 def discover_awq_linears(model_path: str) -> list[str]:
     """Return module prefixes that have qweight/qzeros/scales tensors."""
     from safetensors import safe_open
