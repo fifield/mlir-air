@@ -58,7 +58,7 @@ else
   HF_MODEL_FLAG :=
 endif
 
-.PHONY: help compile run profile verify chat run-awq profile-awq verify-awq clean
+.PHONY: help compile run profile verify chat check-awq-weights run-awq profile-awq verify-awq clean
 
 help:
 	@echo "============================================================"
@@ -115,13 +115,23 @@ verify:
 	cd $(BUILD_DIR) && python3 $(srcdir)/llama32_1b_inference.py \
 		--run-only --n-tokens $(N_TOKENS) --verify --profile --prompt "$(PROMPT)" --model $(MODEL) $(WEIGHTS_FLAG) $(HF_MODEL_FLAG) $(QUANT_FLAG)
 
-run-awq:
+check-awq-weights:
+	@if [ -z "$(AWQ_WEIGHTS)" ]; then \
+		echo "ERROR: AWQ_WEIGHTS is required for AWQ targets"; \
+		exit 2; \
+	fi
+	@if [ ! -d "$(AWQ_WEIGHTS)" ]; then \
+		echo "ERROR: AWQ_WEIGHTS must point to an existing repacked AWQ directory: $(AWQ_WEIGHTS)"; \
+		exit 2; \
+	fi
+
+run-awq: check-awq-weights
 	$(MAKE) run QUANT=awq WEIGHTS=hf
 
-profile-awq:
+profile-awq: check-awq-weights
 	$(MAKE) profile QUANT=awq WEIGHTS=hf
 
-verify-awq:
+verify-awq: check-awq-weights
 	$(MAKE) verify QUANT=awq WEIGHTS=hf
 
 chat:

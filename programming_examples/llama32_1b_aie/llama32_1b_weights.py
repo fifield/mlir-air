@@ -173,13 +173,24 @@ def _resolve_safetensor_files(model_path: str) -> List[str]:
     Returns:
         List of absolute paths to .safetensors files.
     """
-    if os.path.isdir(model_path):
+    expanded_path = os.path.expanduser(model_path)
+    if os.path.isdir(expanded_path):
         # Local directory -- find all safetensors files
-        pattern = os.path.join(model_path, "*.safetensors")
+        pattern = os.path.join(expanded_path, "*.safetensors")
         files = sorted(glob_module.glob(pattern))
         if not files:
-            raise FileNotFoundError(f"No .safetensors files found in {model_path}")
+            raise FileNotFoundError(f"No .safetensors files found in {expanded_path}")
         return files
+
+    # Absolute, explicit relative, and whitespace-containing values are intended
+    # to be filesystem paths, not HuggingFace repo IDs. Fail before HF validation
+    # so bad AWQ_WEIGHTS values produce an actionable local-path error.
+    if (
+        os.path.isabs(expanded_path)
+        or model_path.startswith(("~", "."))
+        or any(ch.isspace() for ch in model_path)
+    ):
+        raise FileNotFoundError(f"Local model path does not exist: {model_path}")
 
     # HuggingFace model ID -- resolve via huggingface_hub. Try the offline
     # path first so a cache hit doesn't print HF's "Fetching N files /

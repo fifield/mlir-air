@@ -31,6 +31,22 @@ def _make_dry(target: str, **vars_: str) -> str:
     return result.stdout
 
 
+def _make(target: str, **vars_: str) -> subprocess.CompletedProcess[str]:
+    cmd = ["make", target]
+    cmd.extend(f"{key}={value}" for key, value in vars_.items())
+    env = os.environ.copy()
+    env.setdefault("PEANO_INSTALL_DIR", "/tmp/peano-for-make-smoke")
+    return subprocess.run(
+        cmd,
+        cwd=EXAMPLE_DIR,
+        env=env,
+        check=False,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+    )
+
+
 def test_run_profile_verify_forward_awq_to_aie_npu_pipeline():
     common = {
         "QUANT": "awq",
@@ -75,6 +91,13 @@ def test_awq_shortcuts_select_aie_npu_awq_defaults():
     assert '--prompt "abc"' in out
 
 
+def test_awq_shortcuts_reject_missing_local_awq_dir_before_python():
+    result = _make("run-awq", AWQ_WEIGHTS="/tmp/awq model")
+    assert result.returncode != 0
+    assert "AWQ_WEIGHTS must point to an existing repacked AWQ directory" in result.stdout
+    assert "llama32_1b_inference.py" not in result.stdout
+
+
 def main() -> int:
     test_run_profile_verify_forward_awq_to_aie_npu_pipeline()
     print("PASS test_run_profile_verify_forward_awq_to_aie_npu_pipeline")
@@ -82,6 +105,8 @@ def main() -> int:
     print("PASS test_compile_forwards_awq_to_aie_npu_compilation")
     test_awq_shortcuts_select_aie_npu_awq_defaults()
     print("PASS test_awq_shortcuts_select_aie_npu_awq_defaults")
+    test_awq_shortcuts_reject_missing_local_awq_dir_before_python()
+    print("PASS test_awq_shortcuts_reject_missing_local_awq_dir_before_python")
     print("PASS test_makefile_targets")
     return 0
 
