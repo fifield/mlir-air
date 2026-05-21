@@ -171,6 +171,32 @@ def compile_mv(tile_m=8):
     _compile_kernel(src, "mv.o", extra_flags=[f"-DDIM_M_OUTPUT={tile_m}"])
 
 
+def compile_mv_awq(tile_m=8, force=False):
+    """Compile mv_awq.o (K=2048 AWQ GEMV external kernel) from source."""
+    src = _PROJ_ROOT / "llama32_1b" / "kernel_builder" / "mv_awq.cc"
+    _compile_kernel(
+        src,
+        "mv_awq.o",
+        extra_flags=[f"-DDIM_M_OUTPUT={tile_m}"],
+        force=force,
+    )
+
+
+def compile_mv_awq_k8192(force=False):
+    """Compile mv_awq_k8192.o with renamed AWQ GEMV symbols for K=8192."""
+    src = _PROJ_ROOT / "llama32_1b" / "kernel_builder" / "mv_awq.cc"
+    _compile_kernel(
+        src,
+        "mv_awq_k8192.o",
+        extra_flags=[
+            "-DDIM_M_OUTPUT=2",
+            "-Dmatvec_awq_bf16=dg_matvec_awq_bf16",
+            "-Dlinalg_fill_bf16=dg_linalg_fill_bf16",
+        ],
+        force=force,
+    )
+
+
 def compile_attn_decode_npu2(head_dim=64):
     """Compile attn_decode_npu2.o (RoPE helpers for the fused decode kernel)."""
     src = _PROJ_ROOT / "attention_decode" / "attn_decode_npu2.cc"
@@ -198,3 +224,5 @@ def compile_all_external_kernels(head_dim=64):
     compile_attn_decode_npu2(head_dim=head_dim)
     compile_mv()
     compile_mv_k8192()
+    compile_mv_awq()
+    compile_mv_awq_k8192()

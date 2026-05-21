@@ -34,6 +34,8 @@ def prepare_air_project():
     # every external symbol referenced by `link_with` in the kernel modules:
     # - mv.o            : K=2048 GEMVs (rms_gemv_rope, o_gemv_ffn, lm_head_gemv)
     # - mv_k8192.o      : K=8192 Down GEMV (renamed entry point in o_gemv_ffn)
+    # - mv_awq.o        : K=2048 AWQ GEMVs (future fused decode path)
+    # - mv_awq_k8192.o  : K=8192 AWQ Down GEMV (renamed symbols)
     # - rope.o          : RoPE (prefill + decode rms_*_rope)
     # - silu_and_mul.o  : SwiGLU (prefill o_ffn, decode o_gemv_ffn)
     # - attn.o          : flash attention (prefill, when --cpu-attn=False)
@@ -45,6 +47,8 @@ def prepare_air_project():
         "attn_npu2.o",
         "mv.o",
         "mv_k8192.o",
+        "mv_awq.o",
+        "mv_awq_k8192.o",
         "attn_decode_npu2.o",
     ]:
         src = Path(obj_name)
