@@ -134,6 +134,69 @@ def decode_attention_cpu(
 # ---------------------------------------------------------------------------
 
 
+def _run_decode_block_awq_cpu(
+    x_bf16,
+    layer_weights,
+    awq_layer,
+    config,
+    k_cache_layer,
+    v_cache_layer,
+    current_pos,
+    rope_lut_bf16,
+):
+    """Correctness-first AWQ decode block using packed weights on CPU.
+
+    This path intentionally avoids AIR generation/NPU execution. It uses the
+    Stage 5 packed-AWQ GEMV helper for every linear so the full decoder can be
+    validated against the same qweight/params tensors that future AIR kernels
+    will consume.
+    """
+    from kernel_builder.gemv_awq_builder import awq_gemv_cpu
+    from llama32_1b_reference import apply_rope, rms_norm, swiglu
+
+    emb_dim = config.emb_dim
+    n_heads = config.n_heads
+    n_kv_heads = config.n_kv_heads
+    head_dim = config.head_dim
+
+    x = x_bf16.reshape(1, emb_dim).astype(np.float32)
+
+    normed = rms_norm(x, layer_weights.attn_norm).reshape(-1).astype(bfloat16)
+    q = awq_gemv_cpu(awq_layer.wq, normed).reshape(n_heads, head_dim)
+    k = awq_gemv_cpu(awq_layer.wk, normed).reshape(n_kv_heads, head_dim)
+    v = awq_gemv_cpu(awq_layer.wv, normed)
+
+    rope_lut_pos = rope_lut_bf16[current_pos : current_pos + 1].astype(np.float32)
+    q_roped = np.empty((n_heads, head_dim), dtype=np.float32)
+    for h in range(n_heads):
+        q_roped[h] = apply_rope(q[h : h + 1].astype(np.float32), rope_lut_pos)[0]
+    k_roped = np.empty((n_kv_heads, head_dim), dtype=np.float32)
+    for h in range(n_kv_heads):
+        k_roped[h] = apply_rope(k[h : h + 1].astype(np.float32), rope_lut_pos)[0]
+
+    k_cache_layer[:, current_pos, :] = k_roped.astype(bfloat16)
+    v_cache_layer[:, current_pos, :] = v.reshape(n_kv_heads, head_dim).astype(bfloat16)
+
+    attn_out = decode_attention_cpu(
+        q_roped.reshape(-1).astype(bfloat16),
+        k_cache_layer,
+        v_cache_layer,
+        current_pos,
+        n_heads,
+        n_kv_heads,
+        head_dim,
+    )
+
+    proj = awq_gemv_cpu(awq_layer.wo, attn_out).astype(np.float32)
+    res1 = x.reshape(-1).astype(np.float32) + proj
+    normed2 = rms_norm(res1.reshape(1, emb_dim), layer_weights.ffn_norm).reshape(-1).astype(bfloat16)
+    gate = awq_gemv_cpu(awq_layer.w_gate, normed2)
+    up = awq_gemv_cpu(awq_layer.w_up, normed2)
+    fused = swiglu(gate.astype(np.float32), up.astype(np.float32)).astype(bfloat16)
+    down = awq_gemv_cpu(awq_layer.w_down, fused).astype(np.float32)
+    return (res1 + down).astype(bfloat16)
+
+
 def run_decode_block(
     x_bf16,
     layer_weights,
@@ -143,6 +206,7 @@ def run_decode_block(
     v_cache_layer,
     current_pos,
     rope_lut_bf16,
+    awq_layer=None,
 ):
     """Run one transformer block for a single decode token.
 
@@ -159,6 +223,18 @@ def run_decode_block(
     Returns:
         output: (emb_dim,) — block output
     """
+    if awq_layer is not None:
+        return _run_decode_block_awq_cpu(
+            x_bf16,
+            layer_weights,
+            awq_layer,
+            config,
+            k_cache_layer,
+            v_cache_layer,
+            current_pos,
+            rope_lut_bf16,
+        )
+
     emb_dim = config.emb_dim
     n_heads = config.n_heads
     n_kv_heads = config.n_kv_heads

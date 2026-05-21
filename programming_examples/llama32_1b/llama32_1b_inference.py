@@ -589,6 +589,9 @@ def generate(
         # Run 16 transformer blocks on NPU
         x = x_decode.copy()
         for layer_idx in range(config.n_layers):
+            awq_layer = None
+            if getattr(weights, "is_awq", False) and weights.awq_layers is not None:
+                awq_layer = weights.awq_layers[layer_idx]
             x = run_decode_block(
                 x,
                 weights.layers[layer_idx],
@@ -598,6 +601,7 @@ def generate(
                 v_cache[layer_idx],
                 current_pos,
                 rope_lut_bf16,
+                awq_layer=awq_layer,
             )
 
         # Final RMSNorm (CPU)
@@ -606,31 +610,37 @@ def generate(
             weights.final_norm.astype(np.float32),
         )
 
-        # LM Head (NPU -- 8-partition GEMV, single XRT call)
+        # LM Head. AWQ correctness-first mode uses packed qweight/params on CPU;
+        # BF16 keeps the existing NPU 8-partition GEMV path.
         x_lm = x_normed.flatten().astype(bfloat16)
-        lm_inputs = [x_lm]
-        lm_output_indices = []
-        for p in range(_LM_N_PARTITIONS):
-            lm_inputs.append(weights._lm_weight_parts_gemv[p])
-            lm_inputs.append(np.zeros(_LM_N_PART, dtype=bfloat16))
-            lm_output_indices.append(2 + 2 * p)
-        lm_results = decode_cache.load_and_run(
-            "lm_head_gemv",
-            LM_GEMV_BACKEND,
-            *lm_inputs,
-            output_indices=lm_output_indices,
-            static_input_indices={1 + 2 * p for p in range(_LM_N_PARTITIONS)},
-            intermediate_indices={2 + 2 * p for p in range(_LM_N_PARTITIONS)},
-        )
+        if getattr(weights, "is_awq", False) and weights.awq_lm_head is not None:
+            from kernel_builder.gemv_awq_builder import awq_gemv_cpu
 
-        # Assemble logits from 8 partitions
-        logits = np.zeros((1, vocab_size), dtype=np.float32)
-        for p in range(_LM_N_PARTITIONS):
-            n_start = p * _LM_N_PART
-            n_end = min(n_start + _LM_N_PART, vocab_size)
-            logits[0, n_start:n_end] = lm_results[2 + 2 * p][: n_end - n_start].astype(
-                np.float32
+            logits = awq_gemv_cpu(weights.awq_lm_head, x_lm).astype(np.float32).reshape(1, -1)
+        else:
+            lm_inputs = [x_lm]
+            lm_output_indices = []
+            for p in range(_LM_N_PARTITIONS):
+                lm_inputs.append(weights._lm_weight_parts_gemv[p])
+                lm_inputs.append(np.zeros(_LM_N_PART, dtype=bfloat16))
+                lm_output_indices.append(2 + 2 * p)
+            lm_results = decode_cache.load_and_run(
+                "lm_head_gemv",
+                LM_GEMV_BACKEND,
+                *lm_inputs,
+                output_indices=lm_output_indices,
+                static_input_indices={1 + 2 * p for p in range(_LM_N_PARTITIONS)},
+                intermediate_indices={2 + 2 * p for p in range(_LM_N_PARTITIONS)},
             )
+
+            # Assemble logits from 8 partitions
+            logits = np.zeros((1, vocab_size), dtype=np.float32)
+            for p in range(_LM_N_PARTITIONS):
+                n_start = p * _LM_N_PART
+                n_end = min(n_start + _LM_N_PART, vocab_size)
+                logits[0, n_start:n_end] = lm_results[2 + 2 * p][: n_end - n_start].astype(
+                    np.float32
+                )
         next_token = int(np.argmax(logits[0]))
 
         t_token = time.perf_counter() - t_token_start
