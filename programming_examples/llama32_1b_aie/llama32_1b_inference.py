@@ -45,6 +45,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from llama32_1b_weights import (
     LlamaConfig,
     load_weights,
+    load_awq_weights,
     synthetic_weights,
     generate_rope_lut,
 )
@@ -702,6 +703,15 @@ def build_session(args) -> Session:
         print("\nUsing synthetic random weights (skipping HuggingFace download).")
         weights = synthetic_weights(config)
         tokenizer = _SyntheticTokenizer()
+    elif args.quant == "awq":
+        if not args.awq_weights:
+            raise ValueError("--quant awq requires --awq-weights PATH")
+        print(f"\nLoading repacked AWQ weights ({args.awq_weights})...")
+        weights = load_awq_weights(args.awq_weights, config=config)
+
+        from transformers import AutoTokenizer
+
+        tokenizer = AutoTokenizer.from_pretrained(args.awq_weights)
     else:
         if args.hf_model_id:
             model_id = args.hf_model_id
@@ -930,10 +940,29 @@ if __name__ == "__main__":
         "Bypasses the --model -> meta-llama/... mapping. Useful for non-gated "
         "mirrors like unsloth/Llama-3.2-1B-Instruct.",
     )
+    parser.add_argument(
+        "--quant",
+        type=str,
+        choices=["bf16", "awq"],
+        default="bf16",
+        help="Weight format: bf16 uses the existing HF path; awq loads repacked AWQ weights.",
+    )
+    parser.add_argument(
+        "--awq-weights",
+        type=str,
+        default=None,
+        help="Path to a repacked AWQ model directory produced by tools/repack_awq.py.",
+    )
     args = parser.parse_args()
 
     if args.synthetic_weights and args.interactive:
         parser.error("--synthetic-weights cannot be combined with --interactive")
+    if args.synthetic_weights and args.quant != "bf16":
+        parser.error("--synthetic-weights cannot be combined with --quant awq")
+    if args.hf_model_id and args.quant != "bf16":
+        parser.error("--hf-model-id cannot be combined with --quant awq")
+    if args.quant == "awq" and not args.awq_weights:
+        parser.error("--quant awq requires --awq-weights PATH")
 
     if args.interactive:
         if args.compile_only:

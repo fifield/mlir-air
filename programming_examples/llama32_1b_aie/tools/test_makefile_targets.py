@@ -2,7 +2,7 @@
 # Copyright (C) 2026, Advanced Micro Devices, Inc.
 # SPDX-License-Identifier: MIT
 
-"""Smoke tests for llama32_1b Makefile NPU run/profile/verify forwarding."""
+"""Smoke tests for llama32_1b_aie Makefile NPU run/profile/verify forwarding."""
 
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ def _make_dry(target: str, **vars_: str) -> str:
     return result.stdout
 
 
-def test_run_profile_verify_forward_awq_to_npu_pipeline():
+def test_run_profile_verify_forward_awq_to_aie_npu_pipeline():
     common = {
         "QUANT": "awq",
         "AWQ_WEIGHTS": "/tmp/awq model",
@@ -41,6 +41,7 @@ def test_run_profile_verify_forward_awq_to_npu_pipeline():
     }
     for target in ("run", "profile", "verify"):
         out = _make_dry(target, **common)
+        assert "llama32_1b_aie" in out
         assert "llama32_1b_inference.py" in out
         assert "--run-only" in out
         assert "--quant awq" in out
@@ -55,16 +56,18 @@ def test_run_profile_verify_forward_awq_to_npu_pipeline():
             assert "--profile" in out
 
 
-def test_compile_forwards_awq_to_npu_compilation():
+def test_compile_forwards_awq_to_aie_npu_compilation():
     out = _make_dry("compile", QUANT="awq", AWQ_WEIGHTS="/tmp/awq model")
+    assert "llama32_1b_aie" in out
     assert "--compile-only" in out
     assert "--quant awq" in out
     assert "--awq-weights '/tmp/awq model'" in out
     assert "--awq-cpu-only" not in out
 
 
-def test_awq_shortcuts_select_npu_awq_defaults():
+def test_awq_shortcuts_select_aie_npu_awq_defaults():
     out = _make_dry("profile-awq", AWQ_WEIGHTS="/tmp/awq", PROMPT="abc")
+    assert "llama32_1b_aie" in out
     assert "--quant awq" in out
     assert "--awq-weights /tmp/awq" in out
     assert "--awq-cpu-only" not in out
@@ -73,12 +76,12 @@ def test_awq_shortcuts_select_npu_awq_defaults():
 
 
 def main() -> int:
-    test_run_profile_verify_forward_awq_to_npu_pipeline()
-    print("PASS test_run_profile_verify_forward_awq_to_npu_pipeline")
-    test_compile_forwards_awq_to_npu_compilation()
-    print("PASS test_compile_forwards_awq_to_npu_compilation")
-    test_awq_shortcuts_select_npu_awq_defaults()
-    print("PASS test_awq_shortcuts_select_npu_awq_defaults")
+    test_run_profile_verify_forward_awq_to_aie_npu_pipeline()
+    print("PASS test_run_profile_verify_forward_awq_to_aie_npu_pipeline")
+    test_compile_forwards_awq_to_aie_npu_compilation()
+    print("PASS test_compile_forwards_awq_to_aie_npu_compilation")
+    test_awq_shortcuts_select_aie_npu_awq_defaults()
+    print("PASS test_awq_shortcuts_select_aie_npu_awq_defaults")
     print("PASS test_makefile_targets")
     return 0
 
