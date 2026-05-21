@@ -28,7 +28,8 @@ sys.path.insert(0, str(_TOOLS_DIR))
 
 from gemv_awq_builder import awq_gemv_cpu  # noqa: E402
 from llama32_1b_decode import run_decode_block  # noqa: E402
-from llama32_1b_reference import transformer_block  # noqa: E402
+from llama32_1b_inference import generate_awq_cpu  # noqa: E402
+from llama32_1b_reference import forward, transformer_block  # noqa: E402
 from llama32_1b_weights import LlamaConfig, load_awq_weights  # noqa: E402
 from repack_awq import dequant_repacked_awq, repack_module_from_logical  # noqa: E402
 from test_awq_weight_loader import _write_tiny_repacked_awq_model  # noqa: E402
@@ -90,11 +91,51 @@ def test_awq_cpu_decode_block_matches_dequantized_reference_for_one_token():
     assert np.isfinite(v_cache.astype(np.float32)).all()
 
 
+def _reference_autoregressive_tokens(prompt_tokens, weights, config, rope_lut, n_tokens):
+    tokens = list(prompt_tokens)
+    for _ in range(n_tokens):
+        logits = forward(np.array(tokens, dtype=np.int64), weights, config, rope_lut=rope_lut[: len(tokens)])
+        tokens.append(int(np.argmax(logits[-1])))
+    return tokens[len(prompt_tokens) :]
+
+
+def test_awq_cpu_generate_matches_dequantized_reference_for_two_tokens():
+    config = LlamaConfig(
+        n_layers=1,
+        emb_dim=4,
+        n_heads=2,
+        head_dim=2,
+        n_kv_heads=1,
+        hidden_dim=8,
+        vocab_size=6,
+    )
+    with tempfile.TemporaryDirectory() as tmpdir:
+        _write_tiny_repacked_awq_model(tmpdir, config)
+        weights = load_awq_weights(tmpdir, config=config)
+
+    prompt_tokens = [0, 1, 2]
+    n_tokens = 2
+    rope_lut = np.ones((len(prompt_tokens) + n_tokens, config.head_dim), dtype=bfloat16)
+
+    got = generate_awq_cpu(
+        prompt_tokens,
+        weights,
+        config,
+        rope_lut,
+        n_tokens=n_tokens,
+    )
+    expected = _reference_autoregressive_tokens(prompt_tokens, weights, config, rope_lut, n_tokens)
+
+    assert got == expected
+
+
 def main() -> int:
     test_awq_gemv_cpu_matches_repacked_dequant_reference()
     print("PASS test_awq_gemv_cpu_matches_repacked_dequant_reference")
     test_awq_cpu_decode_block_matches_dequantized_reference_for_one_token()
     print("PASS test_awq_cpu_decode_block_matches_dequantized_reference_for_one_token")
+    test_awq_cpu_generate_matches_dequantized_reference_for_two_tokens()
+    print("PASS test_awq_cpu_generate_matches_dequantized_reference_for_two_tokens")
     print("PASS gemv_awq_builder_test")
     return 0
 

@@ -516,6 +516,95 @@ def run_npu_prefill(
     return prefill_token, k_cache, v_cache, prompt_len
 
 
+def generate_awq_cpu(
+    prompt_tokens,
+    weights,
+    config,
+    rope_lut_bf16,
+    n_tokens=1,
+):
+    """Generate tokens with mixed-mode AWQ using CPU-only packed decode.
+
+    This is a correctness harness, not a performance path. Prefill uses the
+    dequantized BF16-compatible weights already stored in ``weights.layers``;
+    decode uses packed ``weights.awq_layers`` and ``weights.awq_lm_head`` via
+    ``awq_gemv_cpu``. The control flow mirrors ``generate`` closely enough to
+    validate full autoregressive decoder correctness without requiring AIR/NPU.
+    """
+    if not getattr(weights, "is_awq", False):
+        raise ValueError("generate_awq_cpu requires weights.is_awq=True")
+    if weights.awq_layers is None or weights.awq_lm_head is None:
+        raise ValueError("generate_awq_cpu requires packed AWQ layer and lm_head weights")
+    if n_tokens <= 0:
+        return []
+
+    from kernel_builder.gemv_awq_builder import awq_gemv_cpu
+    from llama32_1b_reference import rms_norm, transformer_block
+
+    prompt_tokens = list(prompt_tokens)
+    seq_len = len(prompt_tokens)
+    emb_dim = config.emb_dim
+    n_kv_heads = config.n_kv_heads
+    head_dim = config.head_dim
+    max_seq = seq_len + n_tokens
+
+    k_cache = np.zeros((config.n_layers, n_kv_heads, max_seq, head_dim), dtype=bfloat16)
+    v_cache = np.zeros((config.n_layers, n_kv_heads, max_seq, head_dim), dtype=bfloat16)
+
+    x = weights.embed_table[np.asarray(prompt_tokens, dtype=np.int64)].astype(np.float32)
+    for layer_idx in range(config.n_layers):
+        x, intermediates = transformer_block(
+            x,
+            weights.layers[layer_idx],
+            rope_lut_bf16[:seq_len].astype(np.float32),
+            config,
+        )
+        k_cache[layer_idx, :, :seq_len, :] = (
+            intermediates["k_roped"]
+            .astype(bfloat16)
+            .reshape(seq_len, n_kv_heads, head_dim)
+            .transpose(1, 0, 2)
+        )
+        v_cache[layer_idx, :, :seq_len, :] = (
+            intermediates["v"]
+            .astype(bfloat16)
+            .reshape(seq_len, n_kv_heads, head_dim)
+            .transpose(1, 0, 2)
+        )
+
+    x_normed = rms_norm(x[-1:].astype(np.float32), weights.final_norm.astype(np.float32))
+    logits = awq_gemv_cpu(weights.awq_lm_head, x_normed.reshape(-1).astype(bfloat16)).astype(np.float32)
+    generated_tokens = [int(np.argmax(logits))]
+
+    current_pos = seq_len
+    x_decode = weights.embed_table[generated_tokens[0]].astype(bfloat16)
+    for _ in range(1, n_tokens):
+        x_token = x_decode.copy()
+        for layer_idx in range(config.n_layers):
+            x_token = run_decode_block(
+                x_token,
+                weights.layers[layer_idx],
+                cache=None,
+                config=config,
+                k_cache_layer=k_cache[layer_idx],
+                v_cache_layer=v_cache[layer_idx],
+                current_pos=current_pos,
+                rope_lut_bf16=rope_lut_bf16,
+                awq_layer=weights.awq_layers[layer_idx],
+            )
+        x_normed = rms_norm(
+            x_token.astype(np.float32).reshape(1, emb_dim),
+            weights.final_norm.astype(np.float32),
+        )
+        logits = awq_gemv_cpu(weights.awq_lm_head, x_normed.reshape(-1).astype(bfloat16)).astype(np.float32)
+        next_token = int(np.argmax(logits))
+        generated_tokens.append(next_token)
+        current_pos += 1
+        x_decode = weights.embed_table[next_token].astype(bfloat16)
+
+    return generated_tokens
+
+
 # ---------------------------------------------------------------------------
 # Full inference: NPU prefill + NPU decode
 # ---------------------------------------------------------------------------
