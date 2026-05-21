@@ -696,8 +696,18 @@ def build_session(args) -> Session:
         sys.exit(0)
 
     if args.run_only:
-        prefill_cache.load_manifest()
-        decode_cache.load_manifest()
+        missing_caches = []
+        if not prefill_cache.load_manifest():
+            missing_caches.append(f"prefill ({prefill_cache.cache_dir})")
+        if not decode_cache.load_manifest():
+            missing_caches.append(f"decode ({decode_cache.cache_dir})")
+        if missing_caches:
+            missing = ", ".join(missing_caches)
+            raise RuntimeError(
+                f"Kernel cache missing or incomplete for --run-only: {missing}. "
+                "Run `make compile` first, or use a Makefile run target so "
+                "ensure-cache can seed the cache."
+            )
 
     if args.synthetic_weights:
         print("\nUsing synthetic random weights (skipping HuggingFace download).")

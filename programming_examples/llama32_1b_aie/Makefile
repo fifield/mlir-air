@@ -58,7 +58,10 @@ else
   HF_MODEL_FLAG :=
 endif
 
-.PHONY: help compile run profile verify chat check-awq-weights run-awq profile-awq verify-awq clean
+PREFILL_MANIFEST := $(BUILD_DIR)/prefill_kernel_cache/manifest.json
+DECODE_MANIFEST  := $(BUILD_DIR)/decode_kernel_cache/manifest.json
+
+.PHONY: help compile ensure-cache run profile verify chat check-awq-weights run-awq profile-awq verify-awq clean
 
 help:
 	@echo "============================================================"
@@ -96,22 +99,27 @@ help:
 	@echo "  make run-awq AWQ_WEIGHTS=./awq_repacked PROMPT=\"Hello\" N_TOKENS=5"
 	@echo "  make verify N_TOKENS=10"
 
-compile:
+$(BUILD_DIR):
 	@mkdir -p $(BUILD_DIR)
+
+compile: | $(BUILD_DIR)
 	cd $(BUILD_DIR) && python3 $(srcdir)/llama32_1b_inference.py --compile-only $(QUANT_FLAG)
 
-run:
-	@mkdir -p $(BUILD_DIR)
+ensure-cache: | $(BUILD_DIR)
+	@if [ ! -f "$(PREFILL_MANIFEST)" ] || [ ! -f "$(DECODE_MANIFEST)" ]; then \
+		echo "Kernel cache missing; running make compile first..."; \
+		$(MAKE) compile; \
+	fi
+
+run: ensure-cache
 	cd $(BUILD_DIR) && python3 $(srcdir)/llama32_1b_inference.py \
 		--run-only --n-tokens $(N_TOKENS) --prompt "$(PROMPT)" --model $(MODEL) $(WEIGHTS_FLAG) $(HF_MODEL_FLAG) $(QUANT_FLAG)
 
-profile:
-	@mkdir -p $(BUILD_DIR)
+profile: ensure-cache
 	cd $(BUILD_DIR) && python3 $(srcdir)/llama32_1b_inference.py \
 		--run-only --n-tokens $(N_TOKENS) --profile --prompt "$(PROMPT)" --model $(MODEL) $(WEIGHTS_FLAG) $(HF_MODEL_FLAG) $(QUANT_FLAG)
 
-verify:
-	@mkdir -p $(BUILD_DIR)
+verify: ensure-cache
 	cd $(BUILD_DIR) && python3 $(srcdir)/llama32_1b_inference.py \
 		--run-only --n-tokens $(N_TOKENS) --verify --profile --prompt "$(PROMPT)" --model $(MODEL) $(WEIGHTS_FLAG) $(HF_MODEL_FLAG) $(QUANT_FLAG)
 
@@ -134,8 +142,7 @@ profile-awq: check-awq-weights
 verify-awq: check-awq-weights
 	$(MAKE) verify QUANT=awq WEIGHTS=hf
 
-chat:
-	@mkdir -p $(BUILD_DIR)
+chat: ensure-cache
 	cd $(BUILD_DIR) && python3 $(srcdir)/llama32_1b_inference.py \
 		--run-only --interactive --n-tokens $(N_TOKENS) --model $(MODEL) $(WEIGHTS_FLAG) $(HF_MODEL_FLAG) $(QUANT_FLAG)
 
